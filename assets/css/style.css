@@ -1,0 +1,393 @@
+/* ===== Variables Couleurs ===== */
+:root {
+    --primary-green: rgb(42, 195, 42);
+    --primary-orange: hsl(25, 75%, 47%);
+    --white: #fff;
+    --light-gray: #f8f9fa;
+    --dark: #2d3436;
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    --shadow-hover: 0 15px 40px rgba(0, 0, 0, 0.15);
+}
+
+/* ===== Global ===== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--light-gray);
+    min-height: 100vh;
+}
+
+/* ===== Animations ===== */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInLeft {
+    from { opacity: 0; transform: translateX(-30px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+.fade-in {
+    animation: fadeIn 0.6s ease-out;
+}
+
+.slide-in-left {
+    animation: slideInLeft 0.5s ease-out;
+}
+
+/* ===== Cartes ===== */
+.card-modern {
+    background: var(--white);
+    border: none;
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.card-modern:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-hover);
+}
+
+.card-modern .card-header {
+    background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+    color: var(--white);
+    border: none;
+    padding: 1.2rem 1.5rem;
+}
+
+/* ===== Boutons ===== */
+.btn-primary-custom {
+    background: var(--primary-green);
+    color: var(--white);
+    border: none;
+    padding: 10px 25px;
+    border-radius: 50px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-primary-custom:hover {
+    background: hsl(120, 55%, 35%);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(42, 195, 42, 0.4);
+    color: var(--white);
+}
+
+.btn-secondary-custom {
+    background: var(--primary-orange);
+    color: var(--white);
+    border: none;
+    padding: 10px 25px;
+    border-radius: 50px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-secondary-custom:hover {
+    background: hsl(25, 65%, 37%);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(200, 120, 30, 0.4);
+    color: var(--white);
+}
+
+.btn-outline-custom {
+    border: 2px solid var(--primary-green);
+    color: var(--primary-green);
+    background: transparent;
+    padding: 8px 20px;
+    border-radius: 50px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-outline-custom:hover {
+    background: var(--primary-green);
+    color: var(--white);
+    transform: translateY(-2px);
+}
+
+/* ===== Badges ===== */
+.badge-status {
+    padding: 6px 14px;
+    border-radius: 50px;
+    font-weight: 500;
+}
+
+.badge-disponible { background: var(--primary-green); color: var(--white); }
+.badge-rupture { background: #e74c3c; color: var(--white); }
+.badge-faible { background: var(--primary-orange); color: var(--white); }
+.badge-attente { background: #f39c12; color: var(--white); }
+.badge-confirme { background: #2ecc71; color: var(--white); }
+.badge-refuse { background: #e74c3c; color: var(--white); }
+
+/* ===== Barre de recherche ===== */
+.search-container {
+    background: var(--white);
+    border-radius: 60px;
+    padding: 8px;
+    box-shadow: var(--shadow);
+    transition: all 0.3s ease;
+}
+
+.search-container:focus-within {
+    box-shadow: 0 0 0 3px rgba(42, 195, 42, 0.3);
+}
+
+.search-container .form-control {
+    border: none;
+    padding: 12px 20px;
+    font-size: 1rem;
+    border-radius: 50px;
+}
+
+.search-container .form-control:focus {
+    box-shadow: none;
+}
+
+.search-container .btn {
+    border-radius: 50px;
+    padding: 12px 30px;
+}
+
+/* ===== Carte Leaflet ===== */
+#pharmacy-map {
+    height: 500px;
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+
+.leaflet-popup-content {
+    padding: 10px;
+}
+
+.leaflet-popup-content h5 {
+    color: var(--primary-green);
+    font-weight: 700;
+}
+
+/* ===== Tableaux ===== */
+.table-modern {
+    background: var(--white);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+}
+
+.table-modern thead {
+    background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+    color: var(--white);
+}
+
+.table-modern thead th {
+    padding: 15px;
+    font-weight: 600;
+    border: none;
+}
+
+.table-modern tbody tr {
+    transition: all 0.3s ease;
+}
+
+.table-modern tbody tr:hover {
+    background: rgba(42, 195, 42, 0.05);
+}
+
+/* ===== Formulaires ===== */
+.form-modern .form-control {
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 12px 16px;
+    transition: all 0.3s ease;
+}
+
+.form-modern .form-control:focus {
+    border-color: var(--primary-green);
+    box-shadow: 0 0 0 4px rgba(42, 195, 42, 0.1);
+}
+
+.form-modern .form-label {
+    font-weight: 600;
+    color: var(--dark);
+}
+
+/* ===== Hero Section ===== */
+.hero-section {
+    background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+    padding: 80px 0;
+    color: var(--white);
+    border-radius: 0 0 50px 50px;
+    margin-bottom: 40px;
+}
+
+.hero-section h1 {
+    font-size: 3rem;
+    font-weight: 800;
+}
+
+.hero-section p {
+    font-size: 1.2rem;
+    opacity: 0.9;
+}
+
+/* ===== Statistiques ===== */
+.stat-card {
+    background: var(--white);
+    padding: 25px;
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    text-align: center;
+    transition: all 0.3s ease;
+    border-left: 5px solid var(--primary-green);
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-hover);
+}
+
+.stat-card .stat-icon {
+    font-size: 2.5rem;
+    color: var(--primary-green);
+    margin-bottom: 10px;
+}
+
+.stat-card .stat-number {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--dark);
+}
+
+.stat-card .stat-label {
+    color: #666;
+    font-weight: 500;
+}
+
+/* ===== Sidebar ===== */
+.sidebar {
+    background: var(--white);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: var(--shadow);
+}
+
+.sidebar .nav-link {
+    padding: 12px 16px;
+    border-radius: 12px;
+    transition: all 0.3s ease;
+    color: var(--dark);
+}
+
+.sidebar .nav-link:hover,
+.sidebar .nav-link.active {
+    background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+    color: var(--white);
+}
+
+.sidebar .nav-link i {
+    margin-right: 10px;
+    width: 20px;
+}
+
+/* ===== Notifications ===== */
+.notification-badge {
+    position: relative;
+}
+
+.notification-badge .badge-dot {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 10px;
+    height: 10px;
+    background: #e74c3c;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+    .hero-section h1 {
+        font-size: 2rem;
+    }
+    
+    .hero-section p {
+        font-size: 1rem;
+    }
+    
+    .search-container {
+        border-radius: 30px;
+    }
+    
+    #pharmacy-map {
+        height: 300px;
+    }
+    
+    .stat-card .stat-number {
+        font-size: 1.5rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .hero-section {
+        padding: 50px 0;
+        border-radius: 0 0 30px 30px;
+    }
+    
+    .card-modern .card-header {
+        padding: 1rem;
+    }
+}
+
+/* ===== Loader ===== */
+.loader {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid var(--primary-green);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--light-gray);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--primary-green);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-orange);
+}

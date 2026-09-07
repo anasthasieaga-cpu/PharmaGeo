@@ -1,0 +1,6 @@
+# Ce dossier reçoit les logos uploadés par les pharmaciens.
+# On autorise l'affichage des images mais on empêche l'exécution
+# de tout script PHP qui aurait pu y être déposé (sécurité upload).
+<FilesMatch "\.(php|phtml|php3|php4|php5|php7|phar)$">
+    Require all denied
+</FilesMatch>

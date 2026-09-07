@@ -1,0 +1,25 @@
+# ==========================================================
+# PharmaGeo - .htaccess racine
+# NB : les blocs <Directory> sont interdits dans un .htaccess
+# (ils causent l'erreur "<Directory not allowed here").
+# On utilise ici uniquement des directives autorisées en .htaccess.
+# ==========================================================
+
+# Désactive l'affichage du contenu des dossiers
+Options -Indexes
+
+# Empêche l'exécution de scripts si jamais un fichier est uploadé avec une double extension
+# (protection basique en plus de la validation applicative)
+<FilesMatch "\.(sql|log|env|ini|bak|sh)$">
+    Require all denied
+</FilesMatch>
+
+# Page d'erreur personnalisée (crée ces fichiers si tu veux les utiliser)
+# ErrorDocument 404 /PharmaGeo/404.php
+# ErrorDocument 500 /PharmaGeo/500.php
+
+# Réécriture d'URL (désactivée par défaut, prête si besoin plus tard)
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /PharmaGeo/
+</IfModule>

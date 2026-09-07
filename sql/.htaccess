@@ -1,0 +1,2 @@
+# Interdit tout accès direct au(x) fichier(s) .sql depuis le navigateur.
+Require all denied

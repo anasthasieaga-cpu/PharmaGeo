@@ -1,0 +1,4 @@
+# Empêche tout accès direct aux fichiers d'inclusion depuis le navigateur.
+# Ces fichiers ne doivent être chargés que via require/require_once par du code PHP.
+# Syntaxe Apache 2.4 (celle de ton Apache/2.4.58) :
+Require all denied
