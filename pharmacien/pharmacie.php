@@ -14,6 +14,7 @@ define('BASE_URL', 'http://localhost/pharmageo/');
 
 // ===== FONCTIONS UTILITAIRES =====
 require_once __DIR__ . '/../includes/fonctions.php';
+require_once __DIR__ . '/../includes/coordonnees.php';
 
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
@@ -94,7 +95,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     if (empty($nom)) $errors[] = "Le nom de la pharmacie est obligatoire.";
     if (empty($adresse)) $errors[] = "L'adresse est obligatoire.";
     if (empty($quartier)) $errors[] = "Le quartier est obligatoire.";
-    if (empty($latitude) || empty($longitude)) $errors[] = "Les coordonnées GPS sont obligatoires.";
+    $coord = pharmaValiderCoordonnees($latitude, $longitude);
+    if (!$coord['ok']) {
+        $errors[] = $coord['erreur'];
+    } else {
+        $latitude = $coord['lat'];
+        $longitude = $coord['lng'];
+    }
     
     // ===== GESTION DU LOGO (upload sécurisé) =====
     $logo_path = null;
@@ -787,6 +794,13 @@ $page_title = 'Ma pharmacie - PharmaGeo';
     </style>
     <link rel="stylesheet" href="../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        .coord-map{height:320px;border-radius:12px;border:1px solid #d1d5db;margin-bottom:.5rem;z-index:0}
+        .locate-status{font-size:.85rem;margin-top:.4rem}
+        .locate-status.success{color:#15803d}
+        .locate-status.error{color:#DC2626}
+    </style>
 </head>
 <body>
 
@@ -1065,8 +1079,15 @@ $page_title = 'Ma pharmacie - PharmaGeo';
                             </div>
                         </div>
                     </div>
+                    <div class="mb-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btnLocate">
+                            <i class="fas fa-location-crosshairs"></i> Utiliser ma position actuelle
+                        </button>
+                        <div class="locate-status" id="locateStatus" aria-live="polite"></div>
+                    </div>
+                    <div id="coordMap" class="coord-map"></div>
                     <div class="form-text mb-2">
-                        <i class="fas fa-info-circle"></i> Utilisez <a href="https://www.google.com/maps" target="_blank">Google Maps</a> pour trouver les coordonnées GPS
+                        <i class="fas fa-info-circle"></i> Cliquez sur la carte ou déplacez le marqueur sur le bâtiment de la pharmacie (vue « Satellite » disponible). Les distances affichées aux patients dépendent de la précision de ce point.
                     </div>
 
                     <div class="row g-3">
@@ -1158,6 +1179,13 @@ $page_title = 'Ma pharmacie - PharmaGeo';
 
     <!-- ===== SCRIPTS ===== -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="../assets/js/coord_picker.js"></script>
+    <script>
+        if (window.PharmaCoordPicker) {
+            PharmaCoordPicker.init({ map: 'coordMap', lat: 'latitude', lng: 'longitude', bouton: 'btnLocate', statut: 'locateStatus' });
+        }
+    </script>
     
     <script>
         document.addEventListener('DOMContentLoaded', function() {

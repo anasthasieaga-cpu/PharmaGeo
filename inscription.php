@@ -11,6 +11,9 @@ ini_set('display_errors', 1);
 // ===== DÉFINITION DES CONSTANTES =====
 define('BASE_URL', 'http://localhost/pharmageo/');
 
+// ===== VALIDATION DES COORDONNÉES GPS =====
+require_once __DIR__ . '/includes/coordonnees.php';
+
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
     $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
@@ -158,8 +161,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($pharmacie_data['quartier'])) {
             $errors[] = "Le quartier est obligatoire.";
         }
-        if (empty($pharmacie_data['latitude']) || empty($pharmacie_data['longitude'])) {
-            $errors[] = "Les coordonnées GPS sont obligatoires pour la géolocalisation.";
+        $coord = pharmaValiderCoordonnees($pharmacie_data['latitude'], $pharmacie_data['longitude']);
+        if (!$coord['ok']) {
+            $errors[] = $coord['erreur'];
+        } else {
+            // Valeurs normalisées (point décimal, 7 décimales) : ce sont
+            // elles qui sont enregistrées.
+            $pharmacie_data['latitude'] = $coord['lat'];
+            $pharmacie_data['longitude'] = $coord['lng'];
         }
         if (empty($pharmacie_data['numero_ordre'])) {
             $errors[] = "Le numéro d'ordre ou d'autorisation est obligatoire.";
@@ -974,6 +983,8 @@ $page_title = 'Inscription - PharmaGeo';
     </style>
     <link rel="stylesheet" href="assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>.coord-map{height:320px;border-radius:12px;border:1px solid #d1d5db;margin-bottom:.5rem;z-index:0}</style>
 </head>
 <body>
 
@@ -1204,14 +1215,15 @@ $page_title = 'Inscription - PharmaGeo';
                     </div>
                 </div>
                 <div class="text-center mb-2">
-                    <button type="button" class="btn-locate" id="btnLocate" onclick="locateMe()">
+                    <button type="button" class="btn-locate" id="btnLocate">
                         <i class="fas fa-location-crosshairs"></i>
-                        <span>Localiser ma position automatiquement</span>
+                        <span>Utiliser ma position actuelle</span>
                     </button>
                     <div class="locate-status" id="locateStatus" aria-live="polite"></div>
                 </div>
+                <div id="coordMap" class="coord-map"></div>
                 <div class="form-text mb-2">
-                    <i class="fas fa-info-circle"></i> Génère les coordonnées automatiquement avec le bouton ci-dessus, ou saisissez-les manuellement (ex. via <a href="https://www.google.com/maps" target="_blank">Google Maps</a>)
+                    <i class="fas fa-info-circle"></i> Cliquez sur la carte ou déplacez le marqueur sur le bâtiment de la pharmacie (vue « Satellite » disponible). Les distances affichées aux patients dépendent de la précision de ce point.
                 </div>
 
                 <div class="row g-3">
@@ -1316,6 +1328,8 @@ $page_title = 'Inscription - PharmaGeo';
 
     <!-- ===== SCRIPTS ===== -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="assets/js/coord_picker.js"></script>
     
     <script>
         // ===== SÉLECTION DU RÔLE =====
@@ -1333,6 +1347,7 @@ $page_title = 'Inscription - PharmaGeo';
             const pharmacieFields = document.getElementById('pharmacieFields');
             if (role === 'pharmacien') {
                 pharmacieFields.classList.add('show');
+                if (window.pharmaCarte) setTimeout(function () { window.pharmaCarte.invalidateSize(); }, 350);
                 // Rendre les champs requis
                 document.querySelectorAll('#pharmacieFields input').forEach(input => {
                     if (input.id !== 'telephone_pharmacie' && input.id !== 'email_pharmacie' && input.id !== 'horaire') {
@@ -1362,90 +1377,13 @@ $page_title = 'Inscription - PharmaGeo';
             }
         }
 
-        // ===== GÉOLOCALISATION AUTOMATIQUE =====
-        const btnLocate = document.getElementById('btnLocate');
-        const latInput = document.getElementById('latitude');
-        const lngInput = document.getElementById('longitude');
-        const locateStatus = document.getElementById('locateStatus');
-
-        function setLocateStatus(message, type) {
-            if (locateStatus) {
-                locateStatus.textContent = message;
-                locateStatus.className = 'locate-status' + (type ? ' ' + type : '');
-            }
-        }
-
-        function resetLocateBtn() {
-            if (btnLocate) {
-                btnLocate.disabled = false;
-                btnLocate.querySelector('span').textContent = 'Localiser ma position automatiquement';
-            }
-        }
-
-        function setCoords(lat, lng) {
-            latInput.value = lat;
-            lngInput.value = lng;
-            latInput.classList.remove('is-invalid');
-            lngInput.classList.remove('is-invalid');
-        }
-
-        // Repli : localisation approximative via l'adresse IP (fonctionne sans
-        // autorisation GPS, par ex. en http hors localhost).
-        function locateByIP() {
-            fetch('https://ipwho.is/')
-                .then(function (res) { return res.json(); })
-                .then(function (data) {
-                    if (data && data.success !== false && data.latitude && data.longitude) {
-                        const lat = data.latitude.toFixed(6);
-                        const lng = data.longitude.toFixed(6);
-                        setCoords(lat, lng);
-                        setLocateStatus('Position approximative (par adresse IP) : ' + lat + ', ' + lng + '. Vous pouvez l\'ajuster manuellement.', 'success');
-                    } else {
-                        setLocateStatus('Impossible de récupérer une position automatique. Saisissez les coordonnées manuellement (Google Maps).', 'error');
-                    }
-                })
-                .catch(function () {
-                    setLocateStatus('Impossible de récupérer une position automatique. Saisissez les coordonnées manuellement (Google Maps).', 'error');
-                })
-                .finally(resetLocateBtn);
-        }
-
-        function locateMe() {
-            if (!navigator.geolocation) {
-                if (btnLocate) {
-                    btnLocate.disabled = true;
-                    btnLocate.querySelector('span').textContent = 'Localisation en cours...';
-                }
-                setLocateStatus('Géolocalisation GPS non supportée par ce navigateur. Localisation approximative par adresse IP...');
-                locateByIP();
-                return;
-            }
-
-            if (btnLocate) {
-                btnLocate.disabled = true;
-                btnLocate.querySelector('span').textContent = 'Localisation en cours...';
-            }
-            setLocateStatus('');
-
-            navigator.geolocation.getCurrentPosition(
-                function (position) {
-                    const lat = position.coords.latitude.toFixed(6);
-                    const lng = position.coords.longitude.toFixed(6);
-                    setCoords(lat, lng);
-                    setLocateStatus('Position détectée (GPS) : ' + lat + ', ' + lng + '.', 'success');
-                    resetLocateBtn();
-                },
-                function (error) {
-                    const messages = {
-                        1: 'Autorisation de géolocalisation refusée.',
-                        2: 'Position actuellement indisponible.',
-                        3: 'Délai de localisation dépassé.'
-                    };
-                    setLocateStatus((messages[error.code] || 'Erreur de localisation.') + ' Localisation approximative par adresse IP...');
-                    locateByIP();
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
-            );
+        // ===== PLACEMENT DE LA PHARMACIE SUR LA CARTE =====
+        if (window.PharmaCoordPicker) {
+            var picker = PharmaCoordPicker.init({
+                map: 'coordMap', lat: 'latitude', lng: 'longitude',
+                bouton: 'btnLocate', statut: 'locateStatus'
+            });
+            if (picker) window.pharmaCarte = picker.carte;
         }
 
         // ===== PASSWORD STRENGTH =====
