@@ -1381,7 +1381,8 @@ $page_title = 'Inscription - PharmaGeo';
         if (window.PharmaCoordPicker) {
             var picker = PharmaCoordPicker.init({
                 map: 'coordMap', lat: 'latitude', lng: 'longitude',
-                bouton: 'btnLocate', statut: 'locateStatus'
+                bouton: 'btnLocate', statut: 'locateStatus',
+                reference: 'assets/data/pharmacies_osm_porto_novo.json'
             });
             if (picker) window.pharmaCarte = picker.carte;
         }

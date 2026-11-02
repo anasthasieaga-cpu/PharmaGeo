@@ -1421,7 +1421,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
                             '<span>' + echapper(p.Nom) + '<small>' + echapper([p.Quartier, p.Commune].filter(Boolean).join(', ')) + '</small></span></div>';
                     }
                     return '<div class="sg-item" role="option" data-i="' + i + '"><i class="fas fa-location-dot"></i>' +
-                        '<span>Chercher le lieu « ' + echapper(sg.terme) + ' »<small>Quartier, rue, repère (Bénin)</small></span></div>';
+                        '<span>Chercher le lieu « ' + echapper(sg.terme) + ' »<small>Quartier, rue, repère (Porto-Novo et environs)</small></span></div>';
                 }).join('');
                 searchSuggest.classList.add('open');
                 searchInput.setAttribute('aria-expanded', 'true');
@@ -1433,7 +1433,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
 
                 searchSuggest.innerHTML = '<div class="sg-vide">Recherche du lieu...</div>';
                 L.Control.Geocoder.nominatim({
-                    geocodingQueryParams: { countrycodes: 'bj', limit: 1 }
+                    geocodingQueryParams: { countrycodes: 'bj', limit: 1, viewbox: '2.46,6.67,2.79,6.33', bounded: 1 }
                 }).geocode(sg.terme, function (resultats) {
                     if (resultats && resultats.length > 0) {
                         allerAuLieu(resultats[0]);

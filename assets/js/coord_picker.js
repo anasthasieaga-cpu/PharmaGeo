@@ -10,7 +10,8 @@
 // centre de la ville, a plusieurs kilometres de la pharmacie.
 //
 // Usage : PharmaCoordPicker.init({ map: 'id', lat: 'id', lng: 'id',
-//                                  bouton: 'id', statut: 'id' });
+//                                  bouton: 'id', statut: 'id',
+//                                  reference: 'url du JSON des pharmacies OSM' });
 // ============================================================
 
 (function () {
@@ -18,7 +19,9 @@
 
     // Centre de Porto-Novo, utilise quand aucune coordonnee n'est saisie.
     var CENTRE = [6.4970, 2.6050];
-    var ZONE = { latMin: 6.0, latMax: 12.6, lngMin: 0.5, lngMax: 4.0 };
+    // Meme zone que includes/coordonnees.php : Porto-Novo, Seme-Podji, Adjarra,
+    // Akpro-Misserete.
+    var ZONE = { latMin: 6.33, latMax: 6.67, lngMin: 2.46, lngMax: 2.79 };
     // Au-dela de cette incertitude (en metres), on demande d'ajuster le marqueur.
     var PRECISION_ACCEPTABLE = 100;
 
@@ -55,7 +58,9 @@
         var saisieValide = lat0 !== null && lng0 !== null && dansLaZone(lat0, lng0);
         var depart = saisieValide ? [lat0, lng0] : CENTRE;
 
-        var carte = L.map(conteneur).setView(depart, saisieValide ? 18 : 13);
+        var limites = L.latLngBounds([ZONE.latMin, ZONE.lngMin], [ZONE.latMax, ZONE.lngMax]);
+        var carte = L.map(conteneur, { maxBounds: limites.pad(0.1), minZoom: 11 })
+            .setView(depart, saisieValide ? 18 : 13);
 
         var plan = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
@@ -97,6 +102,25 @@
             dire('Position choisie : ' + e.latlng.lat.toFixed(6) + ', ' + e.latlng.lng.toFixed(6) + '.', 'success');
         });
 
+        // Pharmacies deja repertoriees sur OpenStreetMap : points gris sur
+        // lesquels on peut cliquer pour placer le marqueur au meme endroit,
+        // a confirmer ensuite sur le batiment.
+        if (options.reference && window.fetch) {
+            fetch(options.reference).then(function (r) { return r.json(); }).then(function (liste) {
+                liste.forEach(function (ph) {
+                    L.circleMarker([ph.lat, ph.lng], {
+                        radius: 6, color: '#6B7280', weight: 2, fillColor: '#E5E7EB', fillOpacity: 0.9
+                    }).addTo(carte)
+                      .bindTooltip(ph.nom + ' (repérée sur OpenStreetMap, cliquez pour placer ici)')
+                      .on('click', function (e) {
+                          L.DomEvent.stopPropagation(e);
+                          placer(ph.lat, ph.lng, true);
+                          dire('Point de « ' + ph.nom + ' » repris depuis OpenStreetMap : vérifiez qu\'il est bien sur votre pharmacie.', 'success');
+                      });
+                });
+            }).catch(function () { /* repere facultatif */ });
+        }
+
         // Saisie manuelle : le marqueur suit les champs.
         function suivreChamps() {
             var lat = nombre(champLat.value);
@@ -105,7 +129,7 @@
             if (!dansLaZone(lat, lng)) {
                 dire(dansLaZone(lng, lat)
                     ? 'Latitude et longitude semblent inversées.'
-                    : 'Ces coordonnées sont en dehors du Bénin.', 'error');
+                    : 'Ces coordonnées sont en dehors de Porto-Novo et des communes voisines.', 'error');
                 return;
             }
             placer(lat, lng, true);
@@ -135,7 +159,7 @@
                 if (bouton) bouton.disabled = false;
 
                 if (!dansLaZone(lat, lng)) {
-                    dire('La position détectée est en dehors du Bénin. Placez le marqueur sur la carte.', 'error');
+                    dire('La position détectée est en dehors de la zone de Porto-Novo. Placez le marqueur sur la carte.', 'error');
                     return;
                 }
 

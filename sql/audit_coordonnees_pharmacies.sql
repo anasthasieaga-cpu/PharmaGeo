@@ -2,7 +2,7 @@
 -- PharmaGeo — Audit des coordonnees des pharmacies (lecture seule)
 --
 -- Liste les pharmacies dont la latitude/longitude est suspecte :
--- hors du Benin, valeurs inversees, point nul, ou partagees avec une autre
+-- hors de la zone de Porto-Novo, valeurs inversees, point nul, ou partagees avec une autre
 -- pharmacie (signe d'une position estimee par IP au centre de la ville).
 -- Aucune donnee n'est modifiee : corrigez ensuite chaque pharmacie depuis
 -- « Ma pharmacie » (carte) ou admin/pharmacies.php.
@@ -12,12 +12,12 @@ SELECT p.Id_pharmacie, p.Nom, p.Quartier, p.Commune, p.Latitude, p.Longitude,
        CASE
            WHEN p.Latitude IS NULL OR p.Longitude IS NULL THEN 'coordonnees absentes'
            WHEN p.Latitude = 0 AND p.Longitude = 0 THEN 'point nul (0, 0)'
-           WHEN p.Longitude BETWEEN 6.0 AND 12.6 AND p.Latitude BETWEEN 0.5 AND 4.0 THEN 'latitude/longitude inversees'
-           ELSE 'hors du Benin'
+           WHEN p.Longitude BETWEEN 6.33 AND 6.67 AND p.Latitude BETWEEN 2.46 AND 2.79 THEN 'latitude/longitude inversees'
+           ELSE 'hors de la zone de Porto-Novo'
        END AS Probleme
 FROM pharmacie p
 WHERE p.Latitude IS NULL OR p.Longitude IS NULL
-   OR NOT (p.Latitude BETWEEN 6.0 AND 12.6 AND p.Longitude BETWEEN 0.5 AND 4.0)
+   OR NOT (p.Latitude BETWEEN 6.33 AND 6.67 AND p.Longitude BETWEEN 2.46 AND 2.79)
 ORDER BY p.Id_pharmacie;
 
 -- Pharmacies distinctes situees exactement au meme point (arrondi a ~10 m).

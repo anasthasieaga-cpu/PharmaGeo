@@ -12,12 +12,16 @@
 // Fichier autonome : aucune dependance, utilisable avant config.php.
 // ============================================================
 
-// Zone couverte par la plateforme (Benin, avec une petite marge). Une
-// coordonnee hors de cette zone est presque toujours une erreur de saisie.
-if (!defined('PHARMA_ZONE_LAT_MIN')) { define('PHARMA_ZONE_LAT_MIN', 6.0); }
-if (!defined('PHARMA_ZONE_LAT_MAX')) { define('PHARMA_ZONE_LAT_MAX', 12.6); }
-if (!defined('PHARMA_ZONE_LNG_MIN')) { define('PHARMA_ZONE_LNG_MIN', 0.5); }
-if (!defined('PHARMA_ZONE_LNG_MAX')) { define('PHARMA_ZONE_LNG_MAX', 4.0); }
+// Zone couverte par la plateforme : Porto-Novo et les communes voisines
+// (Seme-Podji, Adjarra, Akpro-Misserete). Boite englobant ces quatre
+// communes, d'apres leurs limites OpenStreetMap. Une coordonnee hors de
+// cette zone est presque toujours une erreur de saisie (Cotonou, par
+// exemple, se situe a l'ouest de la limite). A modifier ici, et dans
+// assets/js/coord_picker.js, pour ouvrir d'autres communes.
+if (!defined('PHARMA_ZONE_LAT_MIN')) { define('PHARMA_ZONE_LAT_MIN', 6.33); }
+if (!defined('PHARMA_ZONE_LAT_MAX')) { define('PHARMA_ZONE_LAT_MAX', 6.67); }
+if (!defined('PHARMA_ZONE_LNG_MIN')) { define('PHARMA_ZONE_LNG_MIN', 2.46); }
+if (!defined('PHARMA_ZONE_LNG_MAX')) { define('PHARMA_ZONE_LNG_MAX', 2.79); }
 
 /**
  * Convertir une saisie en nombre decimal.
@@ -73,9 +77,9 @@ function pharmaValiderCoordonnees($latSaisie, $lngSaisie) {
     if (!pharmaDansLaZone($lat, $lng)) {
         // Cas le plus frequent : latitude et longitude saisies a l'envers.
         if (pharmaDansLaZone($lng, $lat)) {
-            return $echec("La latitude et la longitude semblent inversées : la latitude du Bénin est autour de 6 à 12 et la longitude autour de 1 à 4.");
+            return $echec("La latitude et la longitude semblent inversées : dans la zone de Porto-Novo, la latitude est autour de 6,5 et la longitude autour de 2,6.");
         }
-        return $echec("Ces coordonnées se trouvent en dehors du Bénin. Vérifiez la saisie ou placez le point sur la carte.");
+        return $echec("Ces coordonnées sont en dehors de Porto-Novo et de ses communes voisines (Sèmè-Podji, Adjarra, Akpro-Missérété). Vérifiez la saisie ou placez le point sur la carte.");
     }
 
     return array('ok' => true, 'lat' => round($lat, 7), 'lng' => round($lng, 7), 'erreur' => null);
