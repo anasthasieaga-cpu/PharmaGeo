@@ -4,26 +4,16 @@
 // Affiche les statistiques, dernières réservations et pharmacies à proximité.
 // ============================================================
 
-// ===== ACTIVATION DES ERREURS =====
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+// ===== GÉOLOCALISATION DE LA PERSONNE =====
+// Les distances sont calculées depuis l'endroit où la personne se trouve
+// réellement (voir includes/geo.php).
+$geo_reload = true;
 
-// ===== DÉFINITION DES CONSTANTES =====
-define('BASE_URL', 'http://localhost/pharmageo/');
+require_once '../../includes/config.php';
+require_once '../../includes/session.php';
+require_once '../../includes/geo.php';
 
-// ===== CONNEXION À LA BASE DE DONNÉES =====
-try {
-    $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-} catch(PDOException $e) {
-    die("Erreur de connexion à la base de données : " . $e->getMessage());
-}
-
-// ===== GESTION DES SESSIONS =====
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+$position = getPositionUtilisateur($pdo);
 
 // ===== VÉRIFICATION CONNEXION =====
 if (!isset($_SESSION['user_id'])) {
@@ -70,7 +60,7 @@ try {
 
     // Dernières réservations
     $dernieres_reservations = $pdo->prepare("
-        SELECT r.*, m.Nom_commercial, m.DCI, p.Nom as Pharmacie, p.Adresse, p.Telephone, p.Quartier
+        SELECT r.*, m.Nom_commercial, m.DCI, p.Nom as Pharmacie, p.Adresse, p.Telephone, p.Quartier, s.Prix as prix_unitaire
         FROM reservation r
         JOIN stock s ON r.Id_stock = s.Id_stock
         JOIN medicament m ON s.Id_medicament = m.Id_medicament
@@ -97,19 +87,44 @@ try {
         SELECT m.Nom_commercial, m.DCI, COUNT(r.Id_recherche) as total
         FROM medicament m
         JOIN recherche r ON r.Mot_recherche LIKE CONCAT('%', m.Nom_commercial, '%')
+        WHERE m.Statut = 'actif'
         GROUP BY m.Id_medicament
         ORDER BY total DESC
         LIMIT 6
     ")->fetchAll();
 
-    // Pharmacies à proximité (pour suggestions)
-    $pharmacies_proches = $pdo->query("
-        SELECT Nom, Quartier, Commune, Telephone, Latitude, Longitude
-        FROM pharmacie 
+    // Pharmacies à proximité : triées par distance depuis la position de la
+// personne (et non par ordre d'insertion). Sans position GPS exploitable,
+// on ne trie pas : proposer un « plus proche » serait faux.
+$geo_precise = geoPositionEstPrecise($position);
+
+$stmt_pharmacies_proches = $pdo->prepare("
+        SELECT Id_pharmacie, Nom, Quartier, Commune, Telephone, Latitude, Longitude,
+               " . ($geo_precise
+                   ? "(6371 * ACOS(LEAST(1, GREATEST(-1,
+                      COS(RADIANS(:lat)) * COS(RADIANS(Latitude)) *
+                      COS(RADIANS(Longitude) - RADIANS(:lng)) +
+                      SIN(RADIANS(:lat)) * SIN(RADIANS(Latitude))
+                      )))) as Distance"
+                   : 'NULL as Distance') . "
+        FROM pharmacie
         WHERE Statut = 'active'
-        ORDER BY Id_pharmacie DESC
+        ORDER BY " . ($geo_precise ? 'Distance ASC' : 'Nom ASC') . "
         LIMIT 4
-    ")->fetchAll();
+    ");
+    $params_pharm = [];
+    if ($geo_precise) {
+        $params_pharm[':lat'] = $position['lat'];
+        $params_pharm[':lng'] = $position['lng'];
+    }
+    $stmt_pharmacies_proches->execute($params_pharm);
+    $pharmacies_proches = $stmt_pharmacies_proches->fetchAll();
+
+    foreach ($pharmacies_proches as $k => $ph) {
+        $pharmacies_proches[$k]['distance_metres'] = $geo_precise
+            ? geoDistanceMetres($position['lat'], $position['lng'], $ph['Latitude'], $ph['Longitude'])
+            : null;
+    }
 
 } catch(PDOException $e) {
     $total_recherches = 0;
@@ -153,17 +168,17 @@ $page_title = 'Tableau de bord - PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --light-bg: #f0f2f5;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --light-bg: #F0FDF4;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-sm: 0 2px 20px rgba(0,0,0,0.04);
             --shadow-md: 0 8px 40px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
-            --shadow-glow-orange: 0 8px 40px rgba(200, 120, 30, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
+            --shadow-glow-orange: 0 8px 40px rgba(21,128,61, 0.20);
             --radius: 16px;
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -256,7 +271,7 @@ $page_title = 'Tableau de bord - PharmaGeo';
         .nav-link-custom:hover,
         .nav-link-custom.active {
             color: var(--primary-green);
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
         }
 
         .nav-link-custom::after {
@@ -278,32 +293,39 @@ $page_title = 'Tableau de bord - PharmaGeo';
         }
 
         .btn-nav-logout {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            background: linear-gradient(135deg, #DC2626, #B91C1C);
             color: white !important;
             padding: 8px 24px !important;
             border-radius: 50px !important;
             font-weight: 600;
             transition: var(--transition);
             border: none;
-            box-shadow: 0 4px 15px rgba(231,76,60,0.2);
+            box-shadow: 0 4px 15px rgba(220,38,38,0.2);
         }
 
         .btn-nav-logout:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(231,76,60,0.35);
+            box-shadow: 0 8px 30px rgba(220,38,38,0.35);
             color: white !important;
         }
 
         /* ===== LAYOUT / SIDEBAR ===== */
         .layout { display: flex; min-height: 100vh; }
         .sidebar-admin {
-            width: 250px; background: linear-gradient(180deg, #0c1f14, #143a1c);
+            width: 250px; background: linear-gradient(180deg, #0F2E19, #14532D);
             color: #fff; flex-shrink: 0; display: flex; flex-direction: column;
             position: fixed; top: 0; bottom: 0; left: 0; overflow-y: auto; z-index: 100;
         }
         .brand-admin { padding: 22px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; }
-        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; }
+        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center;  color: #fff;}
+        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; 
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: #fff;
+        }
+        
         .brand-admin small { color: rgba(255,255,255,0.6); display: block; }
         .nav-menu { padding: 16px 12px; flex: 1; }
         .nav-label { color: rgba(255,255,255,0.4); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; padding: 12px 12px 6px; }
@@ -315,6 +337,10 @@ $page_title = 'Tableau de bord - PharmaGeo';
         .user-profile .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; font-weight: 800; }
         .user-profile .name { font-size: 0.9rem; font-weight: 600; }
         .user-profile .role { font-size: 0.75rem; color: rgba(255,255,255,0.6); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
         @media (max-width: 991px) {
             .sidebar-admin { position: fixed; transform: translateX(-100%); transition: transform 0.3s ease; }
             .sidebar-admin.open { transform: translateX(0); }
@@ -391,7 +417,7 @@ $page_title = 'Tableau de bord - PharmaGeo';
 
         .top-bar .page-actions .btn-action.btn-primary-custom:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 40px rgba(42,195,42,0.35);
+            box-shadow: 0 12px 40px rgba(22,163,74,0.35);
         }
 
         .top-bar .page-actions .btn-action.btn-outline-custom {
@@ -460,23 +486,23 @@ $page_title = 'Tableau de bord - PharmaGeo';
         }
 
         .stat-card .stat-icon.green {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .stat-card .stat-icon.orange {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
         .stat-card .stat-icon.blue {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         .stat-card .stat-icon.purple {
             background: rgba(155,89,182,0.1);
-            color: #9b59b6;
+            color: #1F2937;
         }
 
         .stat-card .stat-number {
@@ -557,14 +583,14 @@ $page_title = 'Tableau de bord - PharmaGeo';
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--gray-text);
-            border-bottom: 2px solid #f0f0f0;
+            border-bottom: 2px solid #F0FDF4;
             padding: 12px 10px;
         }
 
         .table-custom tbody td {
             padding: 12px 10px;
             vertical-align: middle;
-            border-bottom: 1px solid #f5f5f5;
+            border-bottom: 1px solid #F0FDF4;
             font-size: 0.9rem;
         }
 
@@ -573,7 +599,7 @@ $page_title = 'Tableau de bord - PharmaGeo';
         }
 
         .table-custom tbody tr:hover {
-            background: rgba(42,195,42,0.02);
+            background: rgba(22,163,74,0.02);
         }
 
         .table-custom tbody tr:last-child td {
@@ -592,33 +618,33 @@ $page_title = 'Tableau de bord - PharmaGeo';
         }
 
         .badge-status.en_attente {
-            background: rgba(200,120,30,0.12);
+            background: rgba(21,128,61,0.12);
             color: var(--primary-orange);
         }
 
         .badge-status.confirmee {
-            background: rgba(42,195,42,0.12);
+            background: rgba(22,163,74,0.12);
             color: var(--primary-green);
         }
 
         .badge-status.refusee {
-            background: rgba(231,76,60,0.12);
-            color: #e74c3c;
+            background: rgba(220,38,38,0.12);
+            color: #DC2626;
         }
 
         .badge-status.expiree {
             background: rgba(155,89,182,0.12);
-            color: #9b59b6;
+            color: #1F2937;
         }
 
         .badge-status.retiree {
-            background: rgba(52,152,219,0.12);
-            color: #3498db;
+            background: rgba(22,83,52,0.12);
+            color: #166534;
         }
 
         .badge-status.annulee {
             background: rgba(108,117,125,0.12);
-            color: #6c757d;
+            color: #64748B;
         }
 
         /* ===== PHARMACY CARD ===== */
@@ -641,7 +667,7 @@ $page_title = 'Tableau de bord - PharmaGeo';
             width: 40px;
             height: 40px;
             border-radius: 12px;
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -691,7 +717,7 @@ $page_title = 'Tableau de bord - PharmaGeo';
         }
 
         .list-group-item-custom:hover {
-            background: rgba(42,195,42,0.03);
+            background: rgba(22,163,74,0.03);
         }
 
         /* ===== RESPONSIVE ===== */
@@ -762,6 +788,8 @@ $page_title = 'Tableau de bord - PharmaGeo';
         }
     </style>
     <link rel="stylesheet" href="../../assets/css/responsive.css">
+    <?php require_once '../../includes/geo_style.php'; ?>    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -769,10 +797,10 @@ $page_title = 'Tableau de bord - PharmaGeo';
 
     <!-- ===== SIDEBAR ===== -->
     <aside class="sidebar-admin" id="sidebar">
-        <div class="brand-admin">
+        <a href="<?php echo BASE_URL; ?>index.php" class="brand-admin" style="text-decoration: none;">
             <div class="brand-icon"><i class="fas fa-hospital"></i></div>
             <div><h4>PharmaGeo</h4><small>Patient</small></div>
-        </div>
+        </a>
         <nav class="nav-menu">
             <div class="nav-label">Navigation</div>
             <a href="<?php echo BASE_URL; ?>pages/patient/dashboard.php" class="nav-item active"><i class="fas fa-tachometer-alt"></i><span>Tableau de bord</span></a>
@@ -781,15 +809,16 @@ $page_title = 'Tableau de bord - PharmaGeo';
             <a href="<?php echo BASE_URL; ?>pages/patient/historique.php" class="nav-item"><i class="fas fa-history"></i><span>Historique</span></a>
             <a href="<?php echo BASE_URL; ?>pages/patient/profil.php" class="nav-item"><i class="fas fa-user"></i><span>Profil</span></a>
             <div class="nav-label" style="margin-top: 20px;">Système</div>
-            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
+            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.15); margin-bottom: 12px;"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
         </nav>
-        <div class="user-profile">
+        <a class="user-profile" href="<?php echo BASE_URL . lienProfil(); ?>" title="Voir mon profil">
             <div class="avatar"><?php echo strtoupper(substr(($user['Prenom'] ?? 'A'), 0, 1) . substr(($user['Nom'] ?? 'D'), 0, 1)); ?></div>
             <div>
                 <div class="name"><?php echo htmlspecialchars(($user['Prenom'] ?? '') . ' ' . ($user['Nom'] ?? '')); ?></div>
-                <div class="role"><i class="fas fa-user me-1" style="color:#f1c40f;"></i> Patient</div>
+                <div class="role"><i class="fas fa-user me-1" style="color:#DC2626;"></i> Patient</div>
             </div>
-        </div>
+            <i class="fas fa-chevron-right profile-chevron"></i>
+        </a>
     </aside>
 
     <!-- ===== MAIN CONTENT ===== -->
@@ -817,6 +846,9 @@ $page_title = 'Tableau de bord - PharmaGeo';
                 </a>
             </div>
         </div>
+
+        <?php echo geoAfficherPosition($position); ?>
+        <?php echo geoBandeauPosition($position); ?>
 
         <!-- ===== STATS GRID ===== -->
         <div class="stats-grid">
@@ -919,7 +951,15 @@ $page_title = 'Tableau de bord - PharmaGeo';
                                         <div><?php echo htmlspecialchars($r['Pharmacie']); ?></div>
                                         <small class="text-muted"><?php echo htmlspecialchars($r['Quartier'] ?? ''); ?></small>
                                     </td>
-                                    <td><?php echo $r['Quantite']; ?></td>
+                                    <td>
+                                        <?php echo $r['Quantite']; ?>
+                                        <?php $montantDash = $r['Montant'] !== null && $r['Montant'] !== '' ? (float)$r['Montant'] : ((!empty($r['prix_unitaire'])) ? (float)$r['prix_unitaire'] * (int)$r['Quantite'] : null); ?>
+                                        <?php if ($montantDash !== null): ?>
+                                            <small class="d-block text-success fw-semibold">
+                                                <?php echo number_format($montantDash, 0, ',', ' ') . ' FCFA'; ?>
+                                            </small>
+                                        <?php endif; ?>
+                                    </td>
                                     <td>
                                         <span class="badge-status <?php echo $statut['class']; ?>">
                                             <i class="fas <?php echo $statut['icon']; ?>"></i>
@@ -940,7 +980,7 @@ $page_title = 'Tableau de bord - PharmaGeo';
                     <i class="fas fa-calendar-check"></i>
                     <h6>Aucune réservation</h6>
                     <p>Vous n'avez pas encore effectué de réservation.</p>
-                    <a href="<?php echo BASE_URL; ?>pages/patient/recherche.php" class="btn btn-primary-custom mt-2" style="display: inline-block; padding: 10px 28px; border-radius: 50px; background: linear-gradient(135deg, rgb(42,195,42), hsl(25,75%,47%)); color: white; text-decoration: none; font-weight: 600; transition: var(--transition);">
+                    <a href="<?php echo BASE_URL; ?>pages/patient/recherche.php" class="btn btn-primary-custom mt-2" style="display: inline-block; padding: 10px 28px; border-radius: 50px; background: linear-gradient(135deg, #16A34A, #166534); color: white; text-decoration: none; font-weight: 600; transition: var(--transition);">
                         <i class="fas fa-search me-1"></i> Rechercher un médicament
                     </a>
                 </div>
@@ -1000,7 +1040,7 @@ $page_title = 'Tableau de bord - PharmaGeo';
                                             <small class="text-muted d-block"><?php echo htmlspecialchars($med['DCI']); ?></small>
                                         <?php endif; ?>
                                     </div>
-                                    <span class="badge" style="background: rgba(42,195,42,0.1); color: var(--primary-green); padding: 4px 14px; border-radius: 50px; font-weight: 600;">
+                                    <span class="badge" style="background: rgba(22,163,74,0.1); color: var(--primary-green); padding: 4px 14px; border-radius: 50px; font-weight: 600;">
                                         <i class="fas fa-search me-1"></i> <?php echo $med['total']; ?>
                                     </span>
                                 </div>
@@ -1023,7 +1063,9 @@ $page_title = 'Tableau de bord - PharmaGeo';
             <div class="col-12">
                 <div class="section-card">
                     <div class="section-header">
-                        <h5><i class="fas fa-store" style="color: var(--primary-green);"></i> Pharmacies à proximité</h5>
+                        <h5><i class="fas fa-store" style="color: var(--primary-green);"></i>
+                            <?php echo $geo_precise ? 'Pharmacies à proximité' : 'Pharmacies'; ?>
+                        </h5>
                         <a href="<?php echo BASE_URL; ?>pages/patient/carte.php" class="btn-link-custom">
                             Voir sur la carte <i class="fas fa-arrow-right"></i>
                         </a>
@@ -1045,10 +1087,19 @@ $page_title = 'Tableau de bord - PharmaGeo';
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="mt-2">
+                                    <div class="mt-2 d-flex justify-content-between align-items-center">
                                         <small class="text-muted">
                                             <i class="fas fa-phone me-1"></i> <?php echo htmlspecialchars($pharm['Telephone'] ?? 'Non disponible'); ?>
                                         </small>
+                                        <?php $distance_dash = geoFormaterDistance($pharm['distance_metres'] ?? null); ?>
+                                        <span class="geo-distance-chip <?php echo $distance_dash === null ? 'geo-distance-chip--vide' : ''; ?>"
+                                              <?php echo $distance_dash !== null ? 'title="Distance à vol d\'oiseau (ligne droite, non routière)"' : ''; ?>>
+                                            <?php if ($distance_dash !== null): ?>
+                                                <i class="fas fa-route me-1"></i><?php echo $distance_dash; ?>
+                                            <?php else: ?>
+                                                <i class="fas fa-location-arrow me-1"></i>Distance inconnue
+                                            <?php endif; ?>
+                                        </span>
                                     </div>
                                     <a href="<?php echo BASE_URL; ?>pages/patient/carte.php?id=<?php echo $pharm['Id_pharmacie'] ?? ''; ?>" 
                                        class="btn btn-sm btn-outline-custom mt-2" 
@@ -1139,12 +1190,21 @@ $page_title = 'Tableau de bord - PharmaGeo';
             });
 
             // ===== CONSOLE LOG =====
-            console.log('%c PharmaGeo - Patient Dashboard ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c PharmaGeo - Patient Dashboard ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
             console.log('%c Bienvenue sur votre tableau de bord patient.', 'color: #666; font-size: 14px;');
             console.log('%c Raccourcis : Ctrl+R (Recherche) | Ctrl+M (Carte)', 'color: #888; font-size: 12px;');
 
         });
     </script>
+
+    <!-- ===== GÉOLOCALISATION DE LA PERSONNE ===== -->
+    <script>
+        window.BASE_URL = <?php echo json_encode(BASE_URL); ?>;
+        window.PHARMA_GEO = <?php echo geoConfigJS($position); ?>;
+        window.PHARMA_GEO.endpoint = <?php echo json_encode(BASE_URL . 'api/geoloc_api.php'); ?>;
+        window.PHARMA_GEO.reload = true;
+    </script>
+    <script src="<?php echo BASE_URL; ?>assets/js/position.js"></script>
 
 </body>
     <script src="../../assets/js/responsive.js"></script>

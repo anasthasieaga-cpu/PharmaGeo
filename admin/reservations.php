@@ -11,6 +11,12 @@ ini_set('display_errors', 1);
 // ===== DÉFINITION DES CONSTANTES =====
 define('BASE_URL', 'http://localhost/pharmageo/');
 
+// ===== GESTION DES IMAGES (photos de profil) =====
+require_once __DIR__ . '/../includes/images.php';
+
+// ===== PAGINATION (10 éléments par page) =====
+require_once __DIR__ . '/../includes/pagination.php';
+
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
     $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
@@ -52,7 +58,7 @@ if (isset($_GET['action']) && isset($_GET['id']) && isset($_GET['statut'])) {
             
             // Journalisation
             $log = $pdo->prepare("INSERT INTO log (Action, Adresse_ip, Navigateur, Resultat, Id_utilisateur) 
-                                  VALUES ('Changement statut réservation ID: ' . :id . ' vers ' . :statut, :ip, :ua, 'succes', :user)");
+                                  VALUES (CONCAT('Changement statut réservation ID: ', :id, ' vers ', :statut), :ip, :ua, 'succes', :user)");
             $log->execute([
                 ':id' => $id,
                 ':statut' => $statut,
@@ -104,47 +110,56 @@ if (isset($_GET['action']) && $_GET['action'] === 'supprimer' && isset($_GET['id
 }
 
 // ===== RÉCUPÉRATION DES DONNÉES =====
-$filtre_statut = $_GET['statut'] ?? 'tous';
+$filtre_statut = $_GET['statut_filtre'] ?? $_GET['statut'] ?? 'tous';
 $filtre_date = $_GET['date'] ?? '';
 $search = $_GET['search'] ?? '';
 
 try {
-    // Construire la requête
     // Chaîne de jointures : réservation → utilisateur (patient), stock →
     // médicament et pharmacie fournissent le produit et le lieu de retrait.
+    $from = "
+        FROM reservation r
+        JOIN utilisateur u ON r.Id_utilisateur = u.Id_utilisateur
+        JOIN stock s ON r.Id_stock = s.Id_stock
+        JOIN medicament m ON s.Id_medicament = m.Id_medicament
+        JOIN pharmacie p ON s.Id_pharmacie = p.Id_pharmacie
+    ";
+
+    $conditions = ["1=1"];
+    $params = [];
+
+    if ($filtre_statut !== 'tous') {
+        $conditions[] = "r.Statut = :statut";
+        $params[':statut'] = $filtre_statut;
+    }
+
+    if (!empty($filtre_date)) {
+        $conditions[] = "DATE(r.Date_reservation) = :date";
+        $params[':date'] = $filtre_date;
+    }
+
+    if (!empty($search)) {
+        $conditions[] = "(u.Nom LIKE :search OR u.Prenom LIKE :search OR m.Nom_commercial LIKE :search OR p.Nom LIKE :search)";
+        $params[':search'] = '%' . $search . '%';
+    }
+
+    $clauses = ' WHERE ' . implode(' AND ', $conditions);
+
+    // Nombre total de réservations correspondant aux filtres
+    $stmt_count = $pdo->prepare("SELECT COUNT(*) $from$clauses");
+    $stmt_count->execute($params);
+    $pagination = pagination_calculer((int) $stmt_count->fetchColumn());
+
+    // Seule la page courante est chargée (pagination côté serveur)
     $sql = "
         SELECT r.*, 
                u.Nom, u.Prenom, u.Email, u.Telephone,
                m.Nom_commercial, m.DCI,
                p.Nom as Pharmacie, p.Adresse, p.Quartier, p.Telephone as Pharmacie_Tel,
                s.Quantite as Stock_Quantite
-        FROM reservation r
-        JOIN utilisateur u ON r.Id_utilisateur = u.Id_utilisateur
-        JOIN stock s ON r.Id_stock = s.Id_stock
-        JOIN medicament m ON s.Id_medicament = m.Id_medicament
-        JOIN pharmacie p ON s.Id_pharmacie = p.Id_pharmacie
-        WHERE 1=1
-    ";
-    
-    $params = [];
-    
-    if ($filtre_statut !== 'tous') {
-        $sql .= " AND r.Statut = :statut";
-        $params[':statut'] = $filtre_statut;
-    }
-    
-    if (!empty($filtre_date)) {
-        $sql .= " AND DATE(r.Date_reservation) = :date";
-        $params[':date'] = $filtre_date;
-    }
-    
-    if (!empty($search)) {
-        $sql .= " AND (u.Nom LIKE :search OR u.Prenom LIKE :search OR m.Nom_commercial LIKE :search OR p.Nom LIKE :search)";
-        $params[':search'] = '%' . $search . '%';
-    }
-    
-    $sql .= " ORDER BY r.Date_reservation DESC";
-    
+        $from$clauses
+        ORDER BY r.Date_reservation DESC" . pagination_sql_limite($pagination);
+
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $reservations = $stmt->fetchAll();
@@ -172,12 +187,12 @@ try {
 
 // ===== STATUTS POUR AFFICHAGE =====
 $statuts_labels = [
-    'en_attente' => ['label' => 'En attente', 'class' => 'en_attente', 'icon' => 'fa-clock', 'color' => '#f39c12'],
-    'confirmee' => ['label' => 'Confirmée', 'class' => 'confirmee', 'icon' => 'fa-check-circle', 'color' => '#2ecc71'],
-    'refusee' => ['label' => 'Refusée', 'class' => 'refusee', 'icon' => 'fa-times-circle', 'color' => '#e74c3c'],
-    'expiree' => ['label' => 'Expirée', 'class' => 'expiree', 'icon' => 'fa-hourglass-end', 'color' => '#9b59b6'],
-    'retiree' => ['label' => 'Retirée', 'class' => 'retiree', 'icon' => 'fa-shopping-bag', 'color' => '#3498db'],
-    'annulee' => ['label' => 'Annulée', 'class' => 'annulee', 'icon' => 'fa-ban', 'color' => '#7f8c8d']
+    'en_attente' => ['label' => 'En attente', 'class' => 'en_attente', 'icon' => 'fa-clock', 'color' => '#166534'],
+    'confirmee' => ['label' => 'Confirmée', 'class' => 'confirmee', 'icon' => 'fa-check-circle', 'color' => '#16A34A'],
+    'refusee' => ['label' => 'Refusée', 'class' => 'refusee', 'icon' => 'fa-times-circle', 'color' => '#DC2626'],
+    'expiree' => ['label' => 'Expirée', 'class' => 'expiree', 'icon' => 'fa-hourglass-end', 'color' => '#1F2937'],
+    'retiree' => ['label' => 'Retirée', 'class' => 'retiree', 'icon' => 'fa-shopping-bag', 'color' => '#166534'],
+    'annulee' => ['label' => 'Annulée', 'class' => 'annulee', 'icon' => 'fa-ban', 'color' => '#64748B']
 ];
 
 $page_title = 'Gestion des réservations - Administration PharmaGeo';
@@ -204,18 +219,18 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --light-bg: #f0f2f5;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --light-bg: #F0FDF4;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-sm: 0 2px 20px rgba(0,0,0,0.04);
             --shadow-md: 0 8px 40px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
             --shadow-xl: 0 30px 80px rgba(0,0,0,0.16);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
-            --shadow-glow-orange: 0 8px 40px rgba(200, 120, 30, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
+            --shadow-glow-orange: 0 8px 40px rgba(21,128,61, 0.20);
             --radius: 16px;
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -264,6 +279,8 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
             left: 0;
             width: 260px;
             height: 100vh;
+            display: flex;
+            flex-direction: column;
             background: var(--dark-text);
             color: white;
             padding: 20px 0;
@@ -276,22 +293,28 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
         .sidebar::-webkit-scrollbar { width: 4px; }
         .sidebar::-webkit-scrollbar-thumb { background: var(--primary-green); border-radius: 4px; }
 
-        .sidebar .brand {
-            text-align: center;
-            padding: 20px 15px 30px;
+.sidebar .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 16px;
             border-bottom: 1px solid rgba(255,255,255,0.05);
         }
 
-        .sidebar .brand .brand-icon {
+.sidebar .brand .brand-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
-            padding: 12px 15px;
-            border-radius: 14px;
-            font-size: 2rem;
-            display: inline-block;
-            margin-bottom: 10px;
-        }
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+         color: #fff;}
 
-        .sidebar .brand h4 {
+.sidebar .brand h4 {
+            font-size: 1.1rem;
             font-weight: 800;
             margin: 0;
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
@@ -306,7 +329,7 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
             display: block;
         }
 
-        .sidebar .nav-menu { padding: 20px 15px; }
+        .sidebar .nav-menu { padding: 20px 15px; flex: 1; }
 
         .sidebar .nav-menu .nav-label {
             font-size: 0.7rem;
@@ -341,7 +364,7 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
         }
 
         .sidebar .nav-menu .nav-item.active {
-            background: linear-gradient(135deg, rgba(42,195,42,0.2), rgba(200,120,30,0.2));
+            background: linear-gradient(135deg, rgba(22,163,74,0.2), rgba(21,128,61,0.2));
             color: var(--primary-green);
             border-left: 3px solid var(--primary-green);
         }
@@ -349,10 +372,6 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
         .sidebar .nav-menu .nav-item i { width: 20px; text-align: center; font-size: 1rem; }
 
         .sidebar .user-profile {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
             padding: 20px;
             border-top: 1px solid rgba(255,255,255,0.05);
             display: flex;
@@ -376,6 +395,10 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
         .sidebar .user-profile .user-info { flex: 1; }
         .sidebar .user-profile .user-info .name { font-weight: 600; font-size: 0.9rem; color: white; }
         .sidebar .user-profile .user-info .role { font-size: 0.7rem; color: rgba(255,255,255,0.4); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
 
         /* ===== MAIN CONTENT ===== */
         .main-content {
@@ -519,12 +542,12 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
             font-weight: 500;
         }
 
-        .stat-card .stat-icon.green { background: rgba(42,195,42,0.1); color: var(--primary-green); }
-        .stat-card .stat-icon.orange { background: rgba(200,120,30,0.1); color: var(--primary-orange); }
-        .stat-card .stat-icon.blue { background: rgba(52,152,219,0.1); color: #3498db; }
-        .stat-card .stat-icon.red { background: rgba(231,76,60,0.1); color: #e74c3c; }
-        .stat-card .stat-icon.purple { background: rgba(155,89,182,0.1); color: #9b59b6; }
-        .stat-card .stat-icon.gray { background: rgba(108,117,125,0.1); color: #6c757d; }
+        .stat-card .stat-icon.green { background: rgba(22,163,74,0.1); color: var(--primary-green); }
+        .stat-card .stat-icon.orange { background: rgba(21,128,61,0.1); color: var(--primary-orange); }
+        .stat-card .stat-icon.blue { background: rgba(22,83,52,0.1); color: #166534; }
+        .stat-card .stat-icon.red { background: rgba(220,38,38,0.1); color: #DC2626; }
+        .stat-card .stat-icon.purple { background: rgba(155,89,182,0.1); color: #1F2937; }
+        .stat-card .stat-icon.gray { background: rgba(108,117,125,0.1); color: #64748B; }
 
         /* ===== FILTERS ===== */
         .filters-bar {
@@ -543,7 +566,7 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
         .filters-bar .filter-btn {
             padding: 6px 16px;
             border-radius: 50px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid #D9E9DF;
             background: transparent;
             font-weight: 500;
             font-size: 0.8rem;
@@ -595,7 +618,7 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
         .search-box:focus-within {
             border-color: var(--primary-green);
             background: var(--white);
-            box-shadow: 0 0 0 4px rgba(42,195,42,0.1);
+            box-shadow: 0 0 0 4px rgba(22,163,74,0.1);
         }
 
         .search-box .form-control {
@@ -641,14 +664,14 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--gray-text);
-            border-bottom: 2px solid #f0f0f0;
+            border-bottom: 2px solid #F0FDF4;
             padding: 12px 10px;
         }
 
         .table-custom tbody td {
             padding: 14px 10px;
             vertical-align: middle;
-            border-bottom: 1px solid #f5f5f5;
+            border-bottom: 1px solid #F0FDF4;
             font-size: 0.9rem;
         }
 
@@ -657,7 +680,7 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
         }
 
         .table-custom tbody tr:hover {
-            background: rgba(42,195,42,0.02);
+            background: rgba(22,163,74,0.02);
         }
 
         .table-custom tbody tr:last-child td {
@@ -676,33 +699,33 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
         }
 
         .badge-status.en_attente {
-            background: rgba(200,120,30,0.12);
+            background: rgba(21,128,61,0.12);
             color: var(--primary-orange);
         }
 
         .badge-status.confirmee {
-            background: rgba(42,195,42,0.12);
+            background: rgba(22,163,74,0.12);
             color: var(--primary-green);
         }
 
         .badge-status.refusee {
-            background: rgba(231,76,60,0.12);
-            color: #e74c3c;
+            background: rgba(220,38,38,0.12);
+            color: #DC2626;
         }
 
         .badge-status.expiree {
             background: rgba(155,89,182,0.12);
-            color: #9b59b6;
+            color: #1F2937;
         }
 
         .badge-status.retiree {
-            background: rgba(52,152,219,0.12);
-            color: #3498db;
+            background: rgba(22,83,52,0.12);
+            color: #166534;
         }
 
         .badge-status.annulee {
             background: rgba(108,117,125,0.12);
-            color: #6c757d;
+            color: #64748B;
         }
 
         /* ===== BTN ACTION ===== */
@@ -720,7 +743,7 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
         }
 
         .btn-action-sm.btn-confirm {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
@@ -730,37 +753,37 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
         }
 
         .btn-action-sm.btn-refuse {
-            background: rgba(231,76,60,0.1);
-            color: #e74c3c;
+            background: rgba(220,38,38,0.1);
+            color: #DC2626;
         }
 
         .btn-action-sm.btn-refuse:hover {
-            background: #e74c3c;
+            background: #DC2626;
             color: white;
         }
 
         .btn-action-sm.btn-retire {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         .btn-action-sm.btn-retire:hover {
-            background: #3498db;
+            background: #166534;
             color: white;
         }
 
         .btn-action-sm.btn-delete {
             background: rgba(108,117,125,0.1);
-            color: #6c757d;
+            color: #64748B;
         }
 
         .btn-action-sm.btn-delete:hover {
-            background: #6c757d;
+            background: #64748B;
             color: white;
         }
 
         .btn-action-sm.btn-view {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
@@ -784,19 +807,19 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
         .alert-custom i { font-size: 1.2rem; margin-top: 2px; }
 
         .alert-custom-success {
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
             color: var(--primary-green);
             border-left: 4px solid var(--primary-green);
         }
 
         .alert-custom-danger {
-            background: rgba(231,76,60,0.08);
-            color: #e74c3c;
-            border-left: 4px solid #e74c3c;
+            background: rgba(220,38,38,0.08);
+            color: #DC2626;
+            border-left: 4px solid #DC2626;
         }
 
         .alert-custom-warning {
-            background: rgba(200,120,30,0.08);
+            background: rgba(21,128,61,0.08);
             color: var(--primary-orange);
             border-left: 4px solid var(--primary-orange);
         }
@@ -850,9 +873,9 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
             .stats-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
             .stat-card { padding: 10px; }
             .stat-card .stat-number { font-size: 1rem; }
-        }
-    </style>
-    <link rel="stylesheet" href="../assets/css/responsive.css">
+        }    </style>
+    <link rel="stylesheet" href="../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -861,11 +884,10 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
 
     <!-- ===== SIDEBAR ===== -->
     <aside class="sidebar" id="sidebar">
-        <div class="brand">
+        <a href="<?php echo BASE_URL; ?>index.php" class="brand" style="text-decoration: none;">
             <div class="brand-icon"><i class="fas fa-hospital"></i></div>
-            <h4>PharmaGeo</h4>
-            <small>Administration</small>
-        </div>
+            <div><h4>PharmaGeo</h4><small>Administration</small></div>
+        </a>
 
         <nav class="nav-menu">
             <div class="nav-label">Navigation</div>
@@ -914,21 +936,28 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
                 <i class="fas fa-user-edit"></i>
                 <span>Mon profil</span>
             </a>
-            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);">
-                <i class="fas fa-sign-out-alt"></i>
-                <span>Déconnexion</span>
-            </a>
+
         </nav>
 
-        <div class="user-profile">
+        <a class="user-profile" href="<?php echo BASE_URL; ?>admin/profil.php" title="Voir mon profil">
             <div class="avatar">
-                <?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?>
+                <?php if (!empty($_SESSION['photo']) && pharma_image_disponible($_SESSION['photo'])): ?>
+                    <img src="<?php echo htmlspecialchars(pharma_image_url($_SESSION['photo'])); ?>" alt="">
+                <?php else: ?>
+                    <?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?>
+                <?php endif; ?>
             </div>
             <div class="user-info">
                 <div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div>
-                <div class="role"><i class="fas fa-crown me-1" style="color: #f1c40f;"></i> Administrateur</div>
-            </div>
-        </div>
+                <div class="role"><i class="fas fa-crown me-1" style="color: #DC2626;"></i> Administrateur</div>
+            <i class="fas fa-chevron-right profile-chevron"></i>
+        </a>
+    
+    <?php require_once __DIR__ . '/../includes/reinitialiser.php'; echo html_bloc_reinitialiser(); ?>
+    <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.15); margin-top: auto; text-decoration: none;">
+        <i class="fas fa-sign-out-alt"></i>
+        <span>Déconnexion</span>
+    </a>
     </aside>
 
     <!-- ===== MAIN CONTENT ===== -->
@@ -1034,12 +1063,12 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
             </a>
             <a href="<?php echo BASE_URL; ?>admin/reservations.php?statut=refusee&date=<?php echo $filtre_date; ?>&search=<?php echo urlencode($search); ?>" 
                class="filter-btn <?php echo $filtre_statut === 'refusee' ? 'active' : ''; ?>">
-                <i class="fas fa-times-circle" style="color: #e74c3c;"></i> Refusées
+                <i class="fas fa-times-circle" style="color: #DC2626;"></i> Refusées
                 <span class="count"><?php echo $stats['refusees']; ?></span>
             </a>
             <a href="<?php echo BASE_URL; ?>admin/reservations.php?statut=retiree&date=<?php echo $filtre_date; ?>&search=<?php echo urlencode($search); ?>" 
                class="filter-btn <?php echo $filtre_statut === 'retiree' ? 'active' : ''; ?>">
-                <i class="fas fa-shopping-bag" style: color: #3498db;></i> Retirées
+                <i class="fas fa-shopping-bag" style: color: #166534;></i> Retirées
                 <span class="count"><?php echo $stats['retirees']; ?></span>
             </a>
 
@@ -1053,7 +1082,7 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
                     <i class="fas fa-search"></i>
                 </button>
                 <?php if (!empty($search)): ?>
-                    <a href="<?php echo BASE_URL; ?>admin/reservations.php?statut=<?php echo $filtre_statut; ?>&date=<?php echo $filtre_date; ?>" class="btn-search" style="background: #e74c3c; padding: 6px 12px;">
+                    <a href="<?php echo BASE_URL; ?>admin/reservations.php?statut=<?php echo $filtre_statut; ?>&date=<?php echo $filtre_date; ?>" class="btn-search" style="background: #DC2626; padding: 6px 12px;">
                         <i class="fas fa-times"></i>
                     </a>
                 <?php endif; ?>
@@ -1135,18 +1164,18 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
                                     <td class="text-end">
                                         <div class="d-flex gap-1 justify-content-end flex-wrap">
                                             <?php if ($r['Statut'] === 'en_attente'): ?>
-                                                <a href="<?php echo BASE_URL; ?>admin/reservations.php?action=changer&id=<?php echo $r['Id_reservation']; ?>&statut=confirmee&statut_filtre=<?php echo $filtre_statut; ?>&date=<?php echo $filtre_date; ?>&search=<?php echo urlencode($search); ?>" 
+                                                <a href="<?php echo BASE_URL; ?>admin/reservations.php?action=changer&id=<?php echo $r['Id_reservation']; ?>&statut=confirmee&statut_filtre=<?php echo $filtre_statut; ?>&date=<?php echo $filtre_date; ?>&search=<?php echo urlencode($search); ?>&page=<?php echo $pagination['page']; ?>" 
                                                    class="btn-action-sm btn-confirm"
                                                    onclick="return confirm('Confirmer cette réservation ?')">
                                                     <i class="fas fa-check"></i> Confirmer
                                                 </a>
-                                                <a href="<?php echo BASE_URL; ?>admin/reservations.php?action=changer&id=<?php echo $r['Id_reservation']; ?>&statut=refusee&statut_filtre=<?php echo $filtre_statut; ?>&date=<?php echo $filtre_date; ?>&search=<?php echo urlencode($search); ?>" 
+                                                <a href="<?php echo BASE_URL; ?>admin/reservations.php?action=changer&id=<?php echo $r['Id_reservation']; ?>&statut=refusee&statut_filtre=<?php echo $filtre_statut; ?>&date=<?php echo $filtre_date; ?>&search=<?php echo urlencode($search); ?>&page=<?php echo $pagination['page']; ?>" 
                                                    class="btn-action-sm btn-refuse"
                                                    onclick="return confirm('Refuser cette réservation ?')">
                                                     <i class="fas fa-times"></i> Refuser
                                                 </a>
                                             <?php elseif ($r['Statut'] === 'confirmee'): ?>
-                                                <a href="<?php echo BASE_URL; ?>admin/reservations.php?action=changer&id=<?php echo $r['Id_reservation']; ?>&statut=retiree&statut_filtre=<?php echo $filtre_statut; ?>&date=<?php echo $filtre_date; ?>&search=<?php echo urlencode($search); ?>" 
+                                                <a href="<?php echo BASE_URL; ?>admin/reservations.php?action=changer&id=<?php echo $r['Id_reservation']; ?>&statut=retiree&statut_filtre=<?php echo $filtre_statut; ?>&date=<?php echo $filtre_date; ?>&search=<?php echo urlencode($search); ?>&page=<?php echo $pagination['page']; ?>" 
                                                    class="btn-action-sm btn-retire"
                                                    onclick="return confirm('Marquer cette réservation comme retirée ?')">
                                                     <i class="fas fa-shopping-bag"></i> Retirée
@@ -1154,7 +1183,7 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
                                             <?php endif; ?>
                                             
                                             <?php if ($r['Statut'] !== 'en_attente'): ?>
-                                                <a href="<?php echo BASE_URL; ?>admin/reservations.php?action=supprimer&id=<?php echo $r['Id_reservation']; ?>&statut_filtre=<?php echo $filtre_statut; ?>&date=<?php echo $filtre_date; ?>&search=<?php echo urlencode($search); ?>" 
+                                                <a href="<?php echo BASE_URL; ?>admin/reservations.php?action=supprimer&id=<?php echo $r['Id_reservation']; ?>&statut_filtre=<?php echo $filtre_statut; ?>&date=<?php echo $filtre_date; ?>&search=<?php echo urlencode($search); ?>&page=<?php echo $pagination['page']; ?>" 
                                                    class="btn-action-sm btn-delete"
                                                    onclick="return confirm('Supprimer définitivement cette réservation ?')">
                                                     <i class="fas fa-trash"></i>
@@ -1167,6 +1196,13 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
                         </tbody>
                     </table>
                 </div>
+
+                <!-- ===== PAGINATION ===== -->
+                <?php pagination_afficher($pagination, [
+                    'statut' => $filtre_statut,
+                    'date'   => $filtre_date,
+                    'search' => $search
+                ], 'réservations'); ?>
             <?php else: ?>
                 <div class="empty-state">
                     <i class="fas fa-calendar-check"></i>
@@ -1231,8 +1267,8 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
                         text: 'Cette action est irréversible. Voulez-vous vraiment supprimer cette réservation ?',
                         icon: 'warning',
                         showCancelButton: true,
-                        confirmButtonColor: '#6c757d',
-                        cancelButtonColor: '#6c757d',
+                        confirmButtonColor: '#64748B',
+                        cancelButtonColor: '#64748B',
                         confirmButtonText: 'Oui, supprimer',
                         cancelButtonText: 'Annuler'
                     }).then((result) => {
@@ -1260,7 +1296,7 @@ $page_title = 'Gestion des réservations - Administration PharmaGeo';
             });
 
             // ===== CONSOLE LOG =====
-            console.log('%c PharmaGeo - Gestion des réservations ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c PharmaGeo - Gestion des réservations ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
 
         });
     </script>

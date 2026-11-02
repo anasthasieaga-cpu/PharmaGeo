@@ -11,6 +11,12 @@ ini_set('display_errors', 1);
 // ===== DÉFINITION DES CONSTANTES =====
 define('BASE_URL', 'http://localhost/pharmageo/');
 
+// ===== GESTION DES IMAGES (logo pharmacie) =====
+require_once __DIR__ . '/../includes/images.php';
+
+// ===== PAGINATION (10 éléments par page) =====
+require_once __DIR__ . '/../includes/pagination.php';
+
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
     $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
@@ -134,40 +140,51 @@ $search = $_GET['search'] ?? '';
 $action = $_GET['action'] ?? '';
 
 try {
+    // Jointures communes aux deux requêtes (liste + compteur)
+    $from = "FROM pharmacie p
+              JOIN pharmacien ph ON p.Id_pharmacien = ph.Id_pharmacien
+              JOIN utilisateur u ON ph.Id_utilisateur = u.Id_utilisateur";
+
+    $conditions = ["1=1"];
+    $params = [];
+
+    if ($action === 'validation' || $action === 'valider') {
+        $conditions[] = "p.Statut = 'en_attente'";
+    } elseif ($filtre !== 'toutes') {
+        $conditions[] = "p.Statut = :filtre";
+        $params[':filtre'] = $filtre;
+    }
+
+    if (!empty($search)) {
+        $conditions[] = "(p.Nom LIKE :search OR u.Nom LIKE :search OR u.Prenom LIKE :search OR p.Quartier LIKE :search)";
+        $params[':search'] = '%' . $search . '%';
+    }
+
+    $clauses = ' WHERE ' . implode(' AND ', $conditions);
+
+    // Nombre total de pharmacies correspondant aux filtres
+    $stmt_count = $pdo->prepare("SELECT COUNT(*) $from$clauses");
+    $stmt_count->execute($params);
+    $pagination = pagination_calculer((int) $stmt_count->fetchColumn());
+
     // Requête principale : jointures sur pharmacien/utilisateur pour lier
     // chaque pharmacie à son pharmacien responsable, avec sous-requêtes
     // comptant médicaments en stock et réservations associées.
+    // Seule la page courante est chargée (pagination côté serveur).
     $sql = "SELECT p.*, u.Nom, u.Prenom, u.Email, u.Telephone as UserTelephone,
                    (SELECT COUNT(*) FROM stock WHERE Id_pharmacie = p.Id_pharmacie) as total_medicaments,
                    (SELECT COUNT(*) FROM stock WHERE Id_pharmacie = p.Id_pharmacie AND Quantite > 0) as total_disponibles,
                    (SELECT COUNT(*) FROM reservation r JOIN stock s ON r.Id_stock = s.Id_stock WHERE s.Id_pharmacie = p.Id_pharmacie) as total_reservations
-            FROM pharmacie p
-            JOIN pharmacien ph ON p.Id_pharmacien = ph.Id_pharmacien
-            JOIN utilisateur u ON ph.Id_utilisateur = u.Id_utilisateur
-            WHERE 1=1";
-    
-    $params = [];
-    
-    if ($action === 'validation' || $action === 'valider') {
-        $sql .= " AND p.Statut = 'en_attente'";
-    } elseif ($filtre !== 'toutes') {
-        $sql .= " AND p.Statut = :filtre";
-        $params[':filtre'] = $filtre;
-    }
-    
-    if (!empty($search)) {
-        $sql .= " AND (p.Nom LIKE :search OR u.Nom LIKE :search OR u.Prenom LIKE :search OR p.Quartier LIKE :search)";
-        $params[':search'] = '%' . $search . '%';
-    }
-    
-    $sql .= " ORDER BY p.Id_pharmacie DESC";
-    
+            $from$clauses
+            ORDER BY p.Id_pharmacie DESC" . pagination_sql_limite($pagination);
+
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $pharmacies = $stmt->fetchAll();
     
 } catch(PDOException $e) {
     $pharmacies = [];
+    $pagination = pagination_calculer(0);
     $message = "Erreur lors du chargement des pharmacies : " . $e->getMessage();
     $message_type = "danger";
 }
@@ -230,18 +247,18 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --light-bg: #f0f2f5;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --light-bg: #F0FDF4;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-sm: 0 2px 20px rgba(0,0,0,0.04);
             --shadow-md: 0 8px 40px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
             --shadow-xl: 0 30px 80px rgba(0,0,0,0.16);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
-            --shadow-glow-orange: 0 8px 40px rgba(200, 120, 30, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
+            --shadow-glow-orange: 0 8px 40px rgba(21,128,61, 0.20);
             --radius: 16px;
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -281,6 +298,8 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
             left: 0;
             width: 260px;
             height: 100vh;
+            display: flex;
+            flex-direction: column;
             background: var(--dark-text);
             color: white;
             padding: 20px 0;
@@ -293,22 +312,28 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
         .sidebar::-webkit-scrollbar { width: 4px; }
         .sidebar::-webkit-scrollbar-thumb { background: var(--primary-green); border-radius: 4px; }
 
-        .sidebar .brand {
-            text-align: center;
-            padding: 20px 15px 30px;
+.sidebar .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 16px;
             border-bottom: 1px solid rgba(255,255,255,0.05);
         }
 
-        .sidebar .brand .brand-icon {
+.sidebar .brand .brand-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
-            padding: 12px 15px;
-            border-radius: 14px;
-            font-size: 2rem;
-            display: inline-block;
-            margin-bottom: 10px;
-        }
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+         color: #fff;}
 
-        .sidebar .brand h4 {
+.sidebar .brand h4 {
+            font-size: 1.1rem;
             font-weight: 800;
             margin: 0;
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
@@ -323,7 +348,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
             display: block;
         }
 
-        .sidebar .nav-menu { padding: 20px 15px; }
+        .sidebar .nav-menu { padding: 20px 15px; flex: 1; }
 
         .sidebar .nav-menu .nav-label {
             font-size: 0.7rem;
@@ -358,7 +383,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
         }
 
         .sidebar .nav-menu .nav-item.active {
-            background: linear-gradient(135deg, rgba(42,195,42,0.2), rgba(200,120,30,0.2));
+            background: linear-gradient(135deg, rgba(22,163,74,0.2), rgba(21,128,61,0.2));
             color: var(--primary-green);
             border-left: 3px solid var(--primary-green);
         }
@@ -366,7 +391,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
         .sidebar .nav-menu .nav-item i { width: 20px; text-align: center; font-size: 1rem; }
         .sidebar .nav-menu .nav-item .badge-notif {
             margin-left: auto;
-            background: #e74c3c;
+            background: #DC2626;
             color: white;
             padding: 2px 10px;
             border-radius: 50px;
@@ -375,10 +400,6 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
         }
 
         .sidebar .user-profile {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
             padding: 20px;
             border-top: 1px solid rgba(255,255,255,0.05);
             display: flex;
@@ -402,6 +423,10 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
         .sidebar .user-profile .user-info { flex: 1; }
         .sidebar .user-profile .user-info .name { font-weight: 600; font-size: 0.9rem; color: white; }
         .sidebar .user-profile .user-info .role { font-size: 0.7rem; color: rgba(255,255,255,0.4); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
 
         /* ===== MAIN CONTENT ===== */
         .main-content {
@@ -467,7 +492,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
 
         .top-bar .page-actions .btn-action.btn-primary-custom:hover {
             transform: translateY(-2px);
-            box-shadow: 0 12px 40px rgba(42,195,42,0.3);
+            box-shadow: 0 12px 40px rgba(22,163,74,0.3);
         }
 
         .top-bar .page-actions .btn-action.btn-outline-custom {
@@ -572,10 +597,10 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
             font-size: 1.1rem;
         }
 
-        .stat-card .stat-icon.green { background: rgba(42,195,42,0.1); color: var(--primary-green); }
-        .stat-card .stat-icon.orange { background: rgba(200,120,30,0.1); color: var(--primary-orange); }
-        .stat-card .stat-icon.blue { background: rgba(52,152,219,0.1); color: #3498db; }
-        .stat-card .stat-icon.red { background: rgba(231,76,60,0.1); color: #e74c3c; }
+        .stat-card .stat-icon.green { background: rgba(22,163,74,0.1); color: var(--primary-green); }
+        .stat-card .stat-icon.orange { background: rgba(21,128,61,0.1); color: var(--primary-orange); }
+        .stat-card .stat-icon.blue { background: rgba(22,83,52,0.1); color: #166534; }
+        .stat-card .stat-icon.red { background: rgba(220,38,38,0.1); color: #DC2626; }
 
         .stat-card .stat-number {
             font-size: 1.8rem;
@@ -602,7 +627,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
         .filters-bar .filter-btn {
             padding: 8px 20px;
             border-radius: 50px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid #D9E9DF;
             background: transparent;
             font-weight: 600;
             font-size: 0.85rem;
@@ -654,7 +679,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
 
         .search-box:focus-within {
             border-color: var(--primary-green);
-            box-shadow: 0 0 0 4px rgba(42,195,42,0.1);
+            box-shadow: 0 0 0 4px rgba(22,163,74,0.1);
         }
 
         .search-box .form-control {
@@ -698,14 +723,14 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--gray-text);
-            border-bottom: 2px solid #f0f0f0;
+            border-bottom: 2px solid #F0FDF4;
             padding: 12px 10px;
         }
 
         .table-custom tbody td {
             padding: 14px 10px;
             vertical-align: middle;
-            border-bottom: 1px solid #f5f5f5;
+            border-bottom: 1px solid #F0FDF4;
             font-size: 0.9rem;
         }
 
@@ -714,7 +739,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
         }
 
         .table-custom tbody tr:hover {
-            background: rgba(42,195,42,0.02);
+            background: rgba(22,163,74,0.02);
         }
 
         .table-custom tbody tr:last-child td {
@@ -732,9 +757,20 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
             flex-shrink: 0;
         }
 
-        .pharmacy-avatar.green { background: rgba(42,195,42,0.1); color: var(--primary-green); }
-        .pharmacy-avatar.orange { background: rgba(200,120,30,0.1); color: var(--primary-orange); }
-        .pharmacy-avatar.blue { background: rgba(52,152,219,0.1); color: #3498db; }
+        .pharmacy-avatar.green { background: rgba(22,163,74,0.1); color: var(--primary-green); }
+        .pharmacy-avatar.orange { background: rgba(21,128,61,0.1); color: var(--primary-orange); }
+        .pharmacy-avatar.blue { background: rgba(22,83,52,0.1); color: #166534; }
+
+        /* Logo de la pharmacie : l'image occupe toute la pastille. */
+        .pharmacy-avatar { overflow: hidden; }
+
+        .pharmacy-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 12px;
+            display: block;
+        }
 
         .pharmacy-name { font-weight: 700; font-size: 0.95rem; }
         .pharmacy-address { font-size: 0.8rem; color: var(--gray-text); }
@@ -746,12 +782,12 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
             font-weight: 600;
         }
 
-        .badge-status.active { background: rgba(42,195,42,0.1); color: var(--primary-green); }
-        .badge-status.en_attente { background: rgba(200,120,30,0.1); color: var(--primary-orange); }
-        .badge-status.suspendue { background: rgba(231,76,60,0.1); color: #e74c3c; }
+        .badge-status.active { background: rgba(22,163,74,0.1); color: var(--primary-green); }
+        .badge-status.en_attente { background: rgba(21,128,61,0.1); color: var(--primary-orange); }
+        .badge-status.suspendue { background: rgba(220,38,38,0.1); color: #DC2626; }
 
         .badge-pharmacy {
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
             color: var(--primary-green);
             padding: 2px 10px;
             border-radius: 50px;
@@ -772,15 +808,15 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
             gap: 4px;
         }
 
-        .btn-action-sm.btn-approve { background: rgba(42,195,42,0.1); color: var(--primary-green); }
+        .btn-action-sm.btn-approve { background: rgba(22,163,74,0.1); color: var(--primary-green); }
         .btn-action-sm.btn-approve:hover { background: var(--primary-green); color: white; }
-        .btn-action-sm.btn-reject { background: rgba(231,76,60,0.1); color: #e74c3c; }
-        .btn-action-sm.btn-reject:hover { background: #e74c3c; color: white; }
-        .btn-action-sm.btn-view { background: rgba(52,152,219,0.1); color: #3498db; }
-        .btn-action-sm.btn-view:hover { background: #3498db; color: white; }
-        .btn-action-sm.btn-delete { background: rgba(231,76,60,0.1); color: #e74c3c; }
-        .btn-action-sm.btn-delete:hover { background: #e74c3c; color: white; }
-        .btn-action-sm.btn-edit { background: rgba(200,120,30,0.1); color: var(--primary-orange); }
+        .btn-action-sm.btn-reject { background: rgba(220,38,38,0.1); color: #DC2626; }
+        .btn-action-sm.btn-reject:hover { background: #DC2626; color: white; }
+        .btn-action-sm.btn-view { background: rgba(22,83,52,0.1); color: #166534; }
+        .btn-action-sm.btn-view:hover { background: #166534; color: white; }
+        .btn-action-sm.btn-delete { background: rgba(220,38,38,0.1); color: #DC2626; }
+        .btn-action-sm.btn-delete:hover { background: #DC2626; color: white; }
+        .btn-action-sm.btn-edit { background: rgba(21,128,61,0.1); color: var(--primary-orange); }
         .btn-action-sm.btn-edit:hover { background: var(--primary-orange); color: white; }
 
         /* ===== ALERT ===== */
@@ -798,19 +834,19 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
         .alert-custom i { font-size: 1.2rem; margin-top: 2px; }
 
         .alert-custom-success {
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
             color: var(--primary-green);
             border-left: 4px solid var(--primary-green);
         }
 
         .alert-custom-danger {
-            background: rgba(231,76,60,0.08);
-            color: #e74c3c;
-            border-left: 4px solid #e74c3c;
+            background: rgba(220,38,38,0.08);
+            color: #DC2626;
+            border-left: 4px solid #DC2626;
         }
 
         .alert-custom-warning {
-            background: rgba(200,120,30,0.08);
+            background: rgba(21,128,61,0.08);
             color: var(--primary-orange);
             border-left: 4px solid var(--primary-orange);
         }
@@ -846,7 +882,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
 
         /* ===== BANNIÈRE VALIDATION ===== */
         .validation-banner {
-            background: linear-gradient(135deg, rgba(200,120,30,0.1), rgba(200,120,30,0.05));
+            background: linear-gradient(135deg, rgba(21,128,61,0.1), rgba(21,128,61,0.05));
             border-left: 4px solid var(--primary-orange);
             border-radius: var(--radius);
             padding: 16px 20px;
@@ -878,9 +914,9 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
             margin: 0;
             color: var(--gray-text);
             font-size: 0.85rem;
-        }
-    </style>
-    <link rel="stylesheet" href="../assets/css/responsive.css">
+        }    </style>
+    <link rel="stylesheet" href="../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -889,11 +925,10 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
 
     <!-- ===== SIDEBAR ===== -->
     <aside class="sidebar" id="sidebar">
-        <div class="brand">
+        <a href="<?php echo BASE_URL; ?>index.php" class="brand" style="text-decoration: none;">
             <div class="brand-icon"><i class="fas fa-hospital"></i></div>
-            <h4>PharmaGeo</h4>
-            <small>Administration</small>
-        </div>
+            <div><h4>PharmaGeo</h4><small>Administration</small></div>
+        </a>
 
         <nav class="nav-menu">
             <div class="nav-label">Navigation</div>
@@ -942,21 +977,28 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
                 <i class="fas fa-user-edit"></i>
                 <span>Mon profil</span>
             </a>
-            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);">
-                <i class="fas fa-sign-out-alt"></i>
-                <span>Déconnexion</span>
-            </a>
+
         </nav>
 
-        <div class="user-profile">
+        <a class="user-profile" href="<?php echo BASE_URL; ?>admin/profil.php" title="Voir mon profil">
             <div class="avatar">
-                <?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?>
+                <?php if (!empty($_SESSION['photo']) && pharma_image_disponible($_SESSION['photo'])): ?>
+                    <img src="<?php echo htmlspecialchars(pharma_image_url($_SESSION['photo'])); ?>" alt="">
+                <?php else: ?>
+                    <?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?>
+                <?php endif; ?>
             </div>
             <div class="user-info">
                 <div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div>
-                <div class="role"><i class="fas fa-crown me-1" style="color: #f1c40f;"></i> Administrateur</div>
-            </div>
-        </div>
+                <div class="role"><i class="fas fa-crown me-1" style="color: #DC2626;"></i> Administrateur</div>
+            <i class="fas fa-chevron-right profile-chevron"></i>
+        </a>
+    
+    <?php require_once __DIR__ . '/../includes/reinitialiser.php'; echo html_bloc_reinitialiser(); ?>
+    <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.15); margin-top: auto; text-decoration: none;">
+        <i class="fas fa-sign-out-alt"></i>
+        <span>Déconnexion</span>
+    </a>
     </aside>
 
     <!-- ===== MAIN CONTENT ===== -->
@@ -1067,7 +1109,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
             </a>
             <a href="<?php echo BASE_URL; ?>admin/pharmacies.php?filtre=suspendue" 
                class="filter-btn <?php echo $filtre === 'suspendue' ? 'active' : ''; ?>">
-                <i class="fas fa-ban" style="color: #e74c3c;"></i> Suspendues
+                <i class="fas fa-ban" style="color: #DC2626;"></i> Suspendues
                 <span class="badge-count"><?php echo $stats['suspendues']; ?></span>
             </a>
 
@@ -1080,7 +1122,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
                     <i class="fas fa-search"></i>
                 </button>
                 <?php if (!empty($search)): ?>
-                    <a href="<?php echo BASE_URL; ?>admin/pharmacies.php?filtre=<?php echo $filtre; ?><?php echo $action === 'validation' || $action === 'valider' ? '&action=validation' : ''; ?>" class="btn-search" style="background: #e74c3c;">
+                    <a href="<?php echo BASE_URL; ?>admin/pharmacies.php?filtre=<?php echo $filtre; ?><?php echo $action === 'validation' || $action === 'valider' ? '&action=validation' : ''; ?>" class="btn-search" style="background: #DC2626;">
                         <i class="fas fa-times"></i>
                     </a>
                 <?php endif; ?>
@@ -1110,7 +1152,10 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
                                             <div class="pharmacy-avatar <?php 
                                                 echo $pharm['Statut'] === 'active' ? 'green' : ($pharm['Statut'] === 'en_attente' ? 'orange' : 'blue'); 
                                             ?>">
-                                                <i class="fas fa-store"></i>
+                                                <img src="<?php echo htmlspecialchars(pharma_image_url_ou_defaut($pharm['Logo'] ?? null, 'pharmacie')); ?>"
+                                                     alt="Logo de <?php echo htmlspecialchars($pharm['Nom']); ?>"
+                                                     loading="lazy"
+                                                     onerror="this.onerror=null;this.src='<?php echo htmlspecialchars(pharma_image_defaut('pharmacie')); ?>';">
                                             </div>
                                             <div>
                                                 <div class="pharmacy-name"><?php echo htmlspecialchars($pharm['Nom']); ?></div>
@@ -1160,18 +1205,18 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
                                     <td class="text-end">
                                         <div class="d-flex gap-1 justify-content-end flex-wrap">
                                             <?php if ($pharm['Statut'] === 'en_attente'): ?>
-                                                <a href="<?php echo BASE_URL; ?>admin/pharmacies.php?action=valider&id=<?php echo $pharm['Id_pharmacie']; ?>&filtre=<?php echo $filtre; ?><?php echo $action === 'validation' || $action === 'valider' ? '&action=validation' : ''; ?>&search=<?php echo urlencode($search); ?>" 
+                                                <a href="<?php echo BASE_URL; ?>admin/pharmacies.php?action=valider&id=<?php echo $pharm['Id_pharmacie']; ?>&filtre=<?php echo $filtre; ?><?php echo $action === 'validation' || $action === 'valider' ? '&action=validation' : ''; ?>&search=<?php echo urlencode($search); ?>&page=<?php echo $pagination['page']; ?>" 
                                                    class="btn-action-sm btn-approve" 
                                                    onclick="return confirm('Valider cette pharmacie ?')">
                                                     <i class="fas fa-check"></i> Valider
                                                 </a>
-                                                <a href="<?php echo BASE_URL; ?>admin/pharmacies.php?action=rejeter&id=<?php echo $pharm['Id_pharmacie']; ?>&filtre=<?php echo $filtre; ?><?php echo $action === 'validation' || $action === 'valider' ? '&action=validation' : ''; ?>&search=<?php echo urlencode($search); ?>" 
+                                                <a href="<?php echo BASE_URL; ?>admin/pharmacies.php?action=rejeter&id=<?php echo $pharm['Id_pharmacie']; ?>&filtre=<?php echo $filtre; ?><?php echo $action === 'validation' || $action === 'valider' ? '&action=validation' : ''; ?>&search=<?php echo urlencode($search); ?>&page=<?php echo $pagination['page']; ?>" 
                                                    class="btn-action-sm btn-reject"
                                                    onclick="return confirm('Rejeter cette pharmacie ?')">
                                                     <i class="fas fa-times"></i> Rejeter
                                                 </a>
                                             <?php endif; ?>
-                                            <a href="<?php echo BASE_URL; ?>admin/pharmacies.php?action=view&id=<?php echo $pharm['Id_pharmacie']; ?>&filtre=<?php echo $filtre; ?><?php echo $action === 'validation' || $action === 'valider' ? '&action=validation' : ''; ?>&search=<?php echo urlencode($search); ?>" 
+                                            <a href="<?php echo BASE_URL; ?>admin/pharmacies.php?action=view&id=<?php echo $pharm['Id_pharmacie']; ?>&filtre=<?php echo $filtre; ?><?php echo $action === 'validation' || $action === 'valider' ? '&action=validation' : ''; ?>&search=<?php echo urlencode($search); ?>&page=<?php echo $pagination['page']; ?>" 
                                                class="btn-action-sm btn-view">
                                                 <i class="fas fa-eye"></i> Voir
                                             </a>
@@ -1179,7 +1224,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
                                                class="btn-action-sm btn-edit">
                                                 <i class="fas fa-edit"></i>
                                             </a>
-                                            <a href="<?php echo BASE_URL; ?>admin/pharmacies.php?action=supprimer&id=<?php echo $pharm['Id_pharmacie']; ?>&filtre=<?php echo $filtre; ?><?php echo $action === 'validation' || $action === 'valider' ? '&action=validation' : ''; ?>&search=<?php echo urlencode($search); ?>" 
+                                            <a href="<?php echo BASE_URL; ?>admin/pharmacies.php?action=supprimer&id=<?php echo $pharm['Id_pharmacie']; ?>&filtre=<?php echo $filtre; ?><?php echo $action === 'validation' || $action === 'valider' ? '&action=validation' : ''; ?>&search=<?php echo urlencode($search); ?>&page=<?php echo $pagination['page']; ?>" 
                                                class="btn-action-sm btn-delete"
                                                onclick="return confirmDelete(<?php echo $pharm['Id_pharmacie']; ?>, '<?php echo addslashes($pharm['Nom']); ?>')">
                                                 <i class="fas fa-trash"></i>
@@ -1191,6 +1236,16 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
                         </tbody>
                     </table>
                 </div>
+
+                <!-- ===== PAGINATION ===== -->
+                <?php pagination_afficher($pagination, [
+'filtre' => $filtre,
+    'search' => $search,
+    // « action=validation » est un onglet de filtre : il doit survivre
+    // au changement de page (les commandes à effet de bord sont exclues
+    // par défaut, cf. includes/pagination.php).
+    'action' => $action
+    ], 'pharmacies'); ?>
             <?php else: ?>
                 <div class="empty-state">
                     <i class="fas fa-store"></i>
@@ -1255,13 +1310,13 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
                     text: `Voulez-vous vraiment supprimer la pharmacie "${nom}" ? Cette action est irréversible.`,
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonColor: '#e74c3c',
-                    cancelButtonColor: '#6c757d',
+                    confirmButtonColor: '#DC2626',
+                    cancelButtonColor: '#64748B',
                     confirmButtonText: 'Oui, supprimer',
                     cancelButtonText: 'Annuler'
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        window.location.href = `<?php echo BASE_URL; ?>admin/pharmacies.php?action=supprimer&id=${id}&filtre=<?php echo $filtre; ?><?php echo $action === 'validation' || $action === 'valider' ? '&action=validation' : ''; ?>&search=<?php echo urlencode($search); ?>`;
+                        window.location.href = `<?php echo BASE_URL; ?>admin/pharmacies.php?action=supprimer&id=${id}&filtre=<?php echo $filtre; ?><?php echo $action === 'validation' || $action === 'valider' ? '&action=validation' : ''; ?>&search=<?php echo urlencode($search); ?>&page=<?php echo $pagination['page']; ?>`;
                     }
                 });
                 return false;
@@ -1297,7 +1352,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
             });
             <?php endif; ?>
 
-            console.log('%c PharmaGeo - Gestion des pharmacies ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c PharmaGeo - Gestion des pharmacies ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
 
         });
     </script>
@@ -1307,7 +1362,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
     <div class="modal fade" id="viewModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content" style="border-radius: 16px; overflow: hidden;">
-                <div class="modal-header" style="background: linear-gradient(135deg, rgb(42,195,42), hsl(25,75%,47%)); color: white; border: none;">
+                <div class="modal-header" style="background: linear-gradient(135deg, #16A34A, #166534); color: white; border: none;">
                     <h5 class="modal-title fw-bold">
                         <i class="fas fa-store me-2"></i>Détails de la pharmacie
                     </h5>
@@ -1316,15 +1371,11 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
                 <div class="modal-body p-4">
                     <div class="row g-4">
                         <div class="col-md-4 text-center">
-                            <?php if (!empty($view_pharmacie['Logo'])): ?>
-                                <img src="<?php echo htmlspecialchars($view_pharmacie['Logo']); ?>" alt="Logo" 
-                                     class="rounded-circle mb-3" style="width: 120px; height: 120px; object-fit: cover;">
-                            <?php else: ?>
-                                <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3" 
-                                     style="width: 120px; height: 120px; background: linear-gradient(135deg, rgba(42,195,42,.15), rgba(200,120,30,.15)); color: var(--primary-green);">
-                                    <i class="fas fa-store" style="font-size: 40px;"></i>
-                                </div>
-                            <?php endif; ?>
+                            <img src="<?php echo htmlspecialchars(pharma_image_url_ou_defaut($view_pharmacie['Logo'] ?? null, 'pharmacie')); ?>"
+                                 alt="Logo de <?php echo htmlspecialchars($view_pharmacie['Pharmacie_Nom']); ?>"
+                                 class="rounded-circle mb-3"
+                                 style="width: 120px; height: 120px; object-fit: cover; border: 3px solid #16A34A;"
+                                 onerror="this.onerror=null;this.src='<?php echo htmlspecialchars(pharma_image_defaut('pharmacie')); ?>';">
                             <h5 class="mb-1"><?php echo htmlspecialchars($view_pharmacie['Pharmacie_Nom']); ?></h5>
                             <span class="badge-status <?php echo $view_pharmacie['Statut']; ?>">
                                 <?php 
@@ -1376,7 +1427,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
                         </div>
                         <div class="col-3">
                             <div class="border rounded p-3 bg-light">
-                                <div class="fs-4 fw-bold" style="color: #3498db;"><?php echo (int)$view_pharmacie['total_reservations']; ?></div>
+                                <div class="fs-4 fw-bold" style="color: #166534;"><?php echo (int)$view_pharmacie['total_reservations']; ?></div>
                                 <div class="text-muted small">Réservations</div>
                             </div>
                         </div>
@@ -1395,7 +1446,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
                         <?php if (!empty($view_permanences)): ?>
                             <div class="d-flex flex-wrap gap-1">
                                 <?php foreach ($view_permanences as $jp): ?>
-                                    <span class="badge rounded-pill" style="background: rgba(42,195,42,.15); color: #1b7a1b; padding: 6px 12px;">
+                                    <span class="badge rounded-pill" style="background: rgba(22,163,74,.15); color: #166534; padding: 6px 12px;">
                                         <i class="fas fa-calendar-day me-1"></i><?php echo ucfirst(htmlspecialchars($jp['Jour_semaine'])); ?>
                                     </span>
                                 <?php endforeach; ?>
@@ -1407,7 +1458,7 @@ $page_title = 'Gestion des pharmacies - Administration PharmaGeo';
                 </div>
                 <div class="modal-footer">
                     <?php if ($view_pharmacie['Statut'] === 'en_attente'): ?>
-                        <a href="<?php echo BASE_URL; ?>admin/pharmacies.php?action=valider&id=<?php echo $view_pharmacie['Id_pharmacie']; ?>&filtre=<?php echo $filtre; ?>&search=<?php echo urlencode($search); ?>" 
+                        <a href="<?php echo BASE_URL; ?>admin/pharmacies.php?action=valider&id=<?php echo $view_pharmacie['Id_pharmacie']; ?>&filtre=<?php echo $filtre; ?>&search=<?php echo urlencode($search); ?>&page=<?php echo $pagination['page']; ?>" 
                            class="btn btn-success" style="border-radius: 50px; padding: 8px 24px;"
                            onclick="return confirm('Valider cette pharmacie ?')">
                             <i class="fas fa-check"></i> Valider

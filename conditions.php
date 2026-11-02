@@ -19,6 +19,14 @@ function estConnecte() {
     return isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
 }
 
+function lienDashboard() {
+    switch ($_SESSION['role'] ?? '') {
+        case 'administrateur': return 'admin/dashboard.php';
+        case 'pharmacien': return 'pharmacien/dashboard.php';
+        default: return 'pages/patient/dashboard.php';
+    }
+}
+
 $page_title = 'Conditions d\'utilisation - PharmaGeo';
 ?>
 <!DOCTYPE html>
@@ -38,13 +46,13 @@ $page_title = 'Conditions d\'utilisation - PharmaGeo';
     <style>
         /* ===== VARIABLES & BASE ===== */
         :root {
-            --primary-green: #2ac32a;
-            --primary-green-dark: #1e8e1e;
-            --primary-orange: #d4880f;
-            --primary-orange-dark: #b3740d;
-            --dark-text: #0a1628;
+            --primary-green: #16A34A;
+            --primary-green-dark: #166534;
+            --primary-orange: #B91C1C;
+            --primary-orange-dark: #B91C1C;
+            --dark-text: #0F2E19;
             --gray-text: #64748b;
-            --light-bg: #f0f4f8;
+            --light-bg: #F0FDF4;
             --white: #ffffff;
             --shadow-md: 0 8px 30px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
@@ -83,18 +91,18 @@ $page_title = 'Conditions d\'utilisation - PharmaGeo';
             font-weight: 500; color: var(--dark-text); padding: 8px 20px !important;
             border-radius: var(--radius-sm); transition: var(--transition); font-size: 0.95rem; text-decoration: none;
         }
-        .nav-link-custom:hover { color: var(--primary-green); background: rgba(42,195,42,0.08); }
+        .nav-link-custom:hover { color: var(--primary-green); background: rgba(22,163,74,0.08); }
         .btn-nav-connect {
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
             color: white !important; padding: 10px 30px !important; border-radius: 50px !important;
-            font-weight: 600; transition: var(--transition); border: none; box-shadow: 0 8px 40px rgba(42,195,42,0.30);
+            font-weight: 600; transition: var(--transition); border: none; box-shadow: 0 8px 40px rgba(22,163,74,0.30);
             text-decoration: none;
         }
         .btn-nav-connect:hover { transform: translateY(-3px); color: white !important; }
 
         /* ===== BANNIÈRE D'EN-TÊTE DE PAGE ===== */
         .page-hero {
-            background: linear-gradient(135deg, rgba(6,14,26,0.92), rgba(42,195,42,0.85));
+            background: linear-gradient(135deg, rgba(6,14,26,0.92), rgba(22,163,74,0.85));
             padding: 120px 0 70px; color: white; position: relative; overflow: hidden;
         }
         .page-hero::before {
@@ -112,7 +120,7 @@ $page_title = 'Conditions d\'utilisation - PharmaGeo';
         }
         .legal-content h2 {
             font-size: 1.5rem; font-weight: 800; color: var(--dark-text); margin: 36px 0 14px;
-            padding-bottom: 10px; border-bottom: 2px solid rgba(42,195,42,0.15);
+            padding-bottom: 10px; border-bottom: 2px solid rgba(22,163,74,0.15);
         }
         .legal-content h2:first-child { margin-top: 0; }
         .legal-content h3 { font-size: 1.15rem; font-weight: 700; color: var(--dark-text); margin: 24px 0 8px; }
@@ -124,12 +132,12 @@ $page_title = 'Conditions d\'utilisation - PharmaGeo';
         /* ===== BADGE DE MISE À JOUR ===== */
         .update-badge {
             display: inline-flex; align-items: center; gap: 8px; padding: 6px 18px; border-radius: 50px;
-            background: rgba(42,195,42,0.08); color: var(--primary-green); font-size: 0.8rem; font-weight: 600;
+            background: rgba(22,163,74,0.08); color: var(--primary-green); font-size: 0.8rem; font-weight: 600;
         }
 
         /* ===== PIED DE PAGE ===== */
         .footer-custom {
-            background: #0a1628; color: rgba(255,255,255,0.70); padding: 50px 0 24px; position: relative;
+            background: #0F2E19; color: rgba(255,255,255,0.70); padding: 50px 0 24px; position: relative;
         }
         .footer-custom::before {
             content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 4px;
@@ -159,7 +167,7 @@ $page_title = 'Conditions d\'utilisation - PharmaGeo';
             position: fixed; bottom: 30px; right: 30px; width: 50px; height: 50px; border-radius: 50%;
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
             color: white; border: none; display: flex; align-items: center; justify-content: center;
-            font-size: 1.1rem; box-shadow: 0 8px 40px rgba(42,195,42,0.30); cursor: pointer; z-index: 998;
+            font-size: 1.1rem; box-shadow: 0 8px 40px rgba(22,163,74,0.30); cursor: pointer; z-index: 998;
             opacity: 0; visibility: hidden; transform: translateY(30px); transition: var(--transition);
         }
         .back-to-top.show { opacity: 1; visibility: visible; transform: translateY(0); }
@@ -171,7 +179,8 @@ $page_title = 'Conditions d\'utilisation - PharmaGeo';
             .legal-content { padding: 28px 20px; margin: -30px 15px 40px; }
         }
     </style>
-    <link rel="stylesheet" href="assets/css/responsive.css">
+    <link rel="stylesheet" href="assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -183,7 +192,7 @@ $page_title = 'Conditions d\'utilisation - PharmaGeo';
                 <span class="brand-text">PharmaGeo</span>
             </a>
             <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon" style="background-image: url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cpath stroke='rgb(42,195,42)' stroke-width='2.5' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E&quot;) !important;"></span>
+                <span class="navbar-toggler-icon" style="background-image: url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cpath stroke='#16A34A' stroke-width='2.5' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E&quot;) !important;"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto align-items-lg-center gap-1">
@@ -191,7 +200,7 @@ $page_title = 'Conditions d\'utilisation - PharmaGeo';
                     <li><a class="nav-link nav-link-custom" href="<?php echo BASE_URL; ?>pages/patient/recherche.php"><i class="fas fa-search me-1"></i>Rechercher</a></li>
                     <li><a class="nav-link nav-link-custom" href="<?php echo BASE_URL; ?>pages/patient/carte.php"><i class="fas fa-map-marker-alt me-1"></i>Carte</a></li>
                     <?php if (estConnecte()): ?>
-                        <li><a class="nav-link nav-link-custom" href="<?php echo BASE_URL; ?>pages/patient/dashboard.php"><i class="fas fa-user me-1"></i>Dashboard</a></li>
+                        <li><a class="nav-link nav-link-custom" href="<?php echo BASE_URL . lienDashboard(); ?>"><i class="fas fa-user me-1"></i>Dashboard</a></li>
                         <li><a class="nav-link btn-nav-connect" href="<?php echo BASE_URL; ?>deconnexion.php"><i class="fas fa-sign-out-alt me-1"></i>Déconnexion</a></li>
                     <?php else: ?>
                         <li><a class="nav-link btn-nav-connect" href="<?php echo BASE_URL; ?>connexion.php"><i class="fas fa-sign-in-alt me-1"></i>Connexion</a></li>
@@ -313,10 +322,10 @@ $page_title = 'Conditions d\'utilisation - PharmaGeo';
         <div class="container">
             <div class="row g-4">
                 <div class="col-lg-4">
-                    <div class="footer-brand">
+                    <a href="<?php echo BASE_URL; ?>index.php" class="footer-brand" style="text-decoration: none;">
                         <span class="brand-icon"><i class="fas fa-hospital"></i></span>
                         PharmaGeo
-                    </div>
+                    </a>
                     <p class="mt-3" style="max-width: 320px; font-size: 0.95rem;">Plateforme intelligente de géolocalisation des pharmacies à Porto-Novo.</p>
                 </div>
                 <div class="col-lg-2 col-md-4">

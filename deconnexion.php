@@ -28,6 +28,12 @@ if (session_status() === PHP_SESSION_NONE) {
 // ===== VÉRIFICATION SI L'UTILISATEUR EST CONNECTÉ =====
 $is_logged_in = isset($_SESSION['user_id']);
 
+// ===== APRES DÉCONNEXION =====
+// En mode maintenance, l'accueil public est bloqué : on renvoie alors vers
+// la page de connexion (toujours accessible) au lieu de l'accueil.
+$en_maintenance = function_exists('maintenance_est_active') && maintenance_est_active();
+$url_apres_deconnexion = $en_maintenance ? BASE_URL . 'connexion.php' : BASE_URL . 'index.php';
+
 // ===== TRAITEMENT DE LA DÉCONNEXION =====
 if (isset($_GET['confirm']) && $_GET['confirm'] === 'yes') {
     
@@ -59,7 +65,7 @@ if (isset($_GET['confirm']) && $_GET['confirm'] === 'yes') {
     session_destroy();
     
     // Redirection après 2 secondes
-    header('Refresh: 2; url=' . BASE_URL . 'index.php');
+    header('Refresh: 2; url=' . $url_apres_deconnexion);
     $deconnexion_reussie = true;
     
 } else {
@@ -88,13 +94,13 @@ $page_title = 'Déconnexion - PharmaGeo';
     <style>
         /* ===== VARIABLES & BASE ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-xl: 0 30px 80px rgba(0,0,0,0.16);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
@@ -107,7 +113,7 @@ $page_title = 'Déconnexion - PharmaGeo';
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, rgba(42, 195, 42, 0.92), rgba(200, 120, 30, 0.88));
+            background: linear-gradient(135deg, rgba(22,163,74, 0.92), rgba(21,128,61, 0.88));
             padding: 20px;
             position: relative;
         }
@@ -120,7 +126,7 @@ $page_title = 'Déconnexion - PharmaGeo';
             width: 100%;
             height: 100%;
             background-image: 
-                url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900"%3E%3Cdefs%3E%3ClinearGradient id="a" x1="0%25" y1="0%25" x2="100%25" y2="100%25"%3E%3Cstop offset="0%25" style="stop-color:%2342c942;stop-opacity:0.3"/%3E%3Cstop offset="100%25" style="stop-color:%23c8781e;stop-opacity:0.3"/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill="%23f0f2f5" width="1440" height="900"/%3E%3Ccircle cx="200" cy="200" r="300" fill="rgba(42,195,42,0.08)"/%3E%3Ccircle cx="1200" cy="150" r="400" fill="rgba(200,120,30,0.06)"/%3E%3Ccircle cx="700" cy="700" r="350" fill="rgba(42,195,42,0.05)"/%3E%3Ccircle cx="100" cy="600" r="200" fill="rgba(200,120,30,0.04)"/%3E%3C/svg%3E');
+                url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900"%3E%3Cdefs%3E%3ClinearGradient id="a" x1="0%25" y1="0%25" x2="100%25" y2="100%25"%3E%3Cstop offset="0%25" style="stop-color:%2342c942;stop-opacity:0.3"/%3E%3Cstop offset="100%25" style="stop-color:%23c8781e;stop-opacity:0.3"/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill="%23f0f2f5" width="1440" height="900"/%3E%3Ccircle cx="200" cy="200" r="300" fill="rgba(22,163,74,0.08)"/%3E%3Ccircle cx="1200" cy="150" r="400" fill="rgba(21,128,61,0.06)"/%3E%3Ccircle cx="700" cy="700" r="350" fill="rgba(22,163,74,0.05)"/%3E%3Ccircle cx="100" cy="600" r="200" fill="rgba(21,128,61,0.04)"/%3E%3C/svg%3E');
             background-size: cover;
             background-position: center;
             opacity: 0.5;
@@ -134,7 +140,7 @@ $page_title = 'Déconnexion - PharmaGeo';
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(135deg, rgba(42, 195, 42, 0.85), rgba(200, 120, 30, 0.80));
+            background: linear-gradient(135deg, rgba(22,163,74, 0.85), rgba(21,128,61, 0.80));
             z-index: 1;
         }
 
@@ -178,11 +184,11 @@ $page_title = 'Déconnexion - PharmaGeo';
 
         .logout-icon {
             display: inline-block;
-            background: rgba(231, 76, 60, 0.1);
+            background: rgba(220,38,38, 0.1);
             padding: 20px;
             border-radius: 50%;
             font-size: 3rem;
-            color: #e74c3c;
+            color: #DC2626;
             margin-bottom: 16px;
         }
 
@@ -232,12 +238,12 @@ $page_title = 'Déconnexion - PharmaGeo';
 
         .btn-primary-custom:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 40px rgba(42,195,42,0.4);
+            box-shadow: 0 12px 40px rgba(22,163,74,0.4);
             color: white;
         }
 
         .btn-danger-custom {
-            background: #e74c3c;
+            background: #DC2626;
             color: white;
             border: none;
             padding: 12px 32px;
@@ -252,9 +258,9 @@ $page_title = 'Déconnexion - PharmaGeo';
         }
 
         .btn-danger-custom:hover {
-            background: #c0392b;
+            background: #B91C1C;
             transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(231,76,60,0.3);
+            box-shadow: 0 8px 30px rgba(220,38,38,0.3);
             color: white;
         }
 
@@ -347,7 +353,8 @@ $page_title = 'Déconnexion - PharmaGeo';
             }
         }
     </style>
-    <link rel="stylesheet" href="assets/css/responsive.css">
+    <link rel="stylesheet" href="assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -363,14 +370,22 @@ $page_title = 'Déconnexion - PharmaGeo';
         
         <?php if ($deconnexion_reussie): ?>
             <!-- ===== DÉCONNEXION RÉUSSIE ===== -->
-            <div class="logout-icon" style="background: rgba(42,195,42,0.1); color: var(--primary-green);">
+            <div class="logout-icon" style="background: rgba(22,163,74,0.1); color: var(--primary-green);">
                 <i class="fas fa-check-circle"></i>
             </div>
             <h2>Déconnexion <span class="highlight">réussie</span></h2>
-            <p>Vous avez été déconnecté avec succès. Vous allez être redirigé vers la page d'accueil.</p>
+            <?php if ($en_maintenance): ?>
+                <p>Vous avez été déconnecté avec succès. Vous allez être redirigé vers la page de connexion.</p>
+            <?php else: ?>
+                <p>Vous avez été déconnecté avec succès. Vous allez être redirigé vers la page d'accueil.</p>
+            <?php endif; ?>
             <div class="spinner" style="margin: 0 auto 16px; display: block;"></div>
-            <a href="<?php echo BASE_URL; ?>" class="btn-primary-custom">
-                <i class="fas fa-home"></i> Retour à l'accueil
+            <a href="<?php echo $url_apres_deconnexion; ?>" class="btn-primary-custom">
+                <?php if ($en_maintenance): ?>
+                    <i class="fas fa-sign-in-alt"></i> Aller à la connexion
+                <?php else: ?>
+                    <i class="fas fa-home"></i> Retour à l'accueil
+                <?php endif; ?>
             </a>
 
         <?php elseif ($is_logged_in): ?>
@@ -391,7 +406,7 @@ $page_title = 'Déconnexion - PharmaGeo';
 
         <?php else: ?>
             <!-- ===== NON CONNECTÉ ===== -->
-            <div class="logout-icon" style="background: rgba(52,152,219,0.1); color: #3498db;">
+            <div class="logout-icon" style="background: rgba(22,83,52,0.1); color: #166534;">
                 <i class="fas fa-info-circle"></i>
             </div>
             <h2>Déjà <span class="highlight">déconnecté</span></h2>
@@ -419,13 +434,13 @@ $page_title = 'Déconnexion - PharmaGeo';
                 seconds--;
                 if (seconds <= 0) {
                     clearInterval(counter);
-                    window.location.href = '<?php echo BASE_URL; ?>';
+                    window.location.href = '<?php echo $url_apres_deconnexion; ?>';
                 }
             }, 1000);
             <?php endif; ?>
 
             // ===== CONSOLE LOG =====
-            console.log('%c PharmaGeo - Déconnexion ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c PharmaGeo - Déconnexion ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
             console.log('%c À bientôt sur PharmaGeo !', 'color: #666; font-size: 14px;');
 
         });

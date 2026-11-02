@@ -7,11 +7,11 @@
          liens utiles et chargement des scripts globaux.
          ============================================================ -->
     <!-- ===== FOOTER ===== -->
-    <footer class="text-white py-4 mt-5" style="background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%));">
+    <footer class="text-white py-4 mt-5" style="background: linear-gradient(135deg, #16A34A, #166534);">
         <div class="container">
             <div class="row">
                 <div class="col-md-4 mb-3">
-                    <h5><i class="fas fa-hospital me-2"></i>PharmaGeo</h5>
+                    <h5><a href="<?php echo BASE_URL; ?>index.php" style="color: inherit; text-decoration: none;"><i class="fas fa-hospital me-2"></i>PharmaGeo</a></h5>
                     <p class="small opacity-75">
                         Plateforme intelligente de géolocalisation des pharmacies et de recherche de disponibilité des médicaments.
                     </p>
@@ -67,6 +67,22 @@
     <script>
         window.BASE_URL = <?php echo json_encode(BASE_URL); ?>;
     </script>
+
+    <!-- Position de la personne servant de référence au calcul des distances.
+         $geo_reload = true dans une page signifie : recharger si le navigateur
+         détecte une position différente de celle utilisée pour le rendu. -->
+    <?php
+    require_once __DIR__ . '/geo.php';
+    if (!isset($geo_position)) {
+        $geo_position = getPositionUtilisateur(isset($pdo) ? $pdo : null);
+    }
+    ?>
+    <script>
+        window.PHARMA_GEO = <?php echo geoConfigJS($geo_position); ?>;
+        window.PHARMA_GEO.endpoint = <?php echo json_encode(BASE_URL . 'api/geoloc_api.php'); ?>;
+        window.PHARMA_GEO.reload = <?php echo !empty($geo_reload) ? 'true' : 'false'; ?>;
+    </script>
+
     <!-- Bootstrap 5 Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
@@ -79,6 +95,9 @@
     
     <!-- Scripts personnalisés -->
     <script src="<?php echo BASE_URL; ?>assets/js/app.js"></script>
+
+    <!-- Détection automatique de la position de la personne -->
+    <script src="<?php echo BASE_URL; ?>assets/js/position.js"></script>
     
     <!-- Responsivité globale -->
     <script src="<?php echo BASE_URL; ?>assets/js/responsive.js"></script>

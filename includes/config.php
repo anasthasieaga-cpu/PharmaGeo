@@ -13,10 +13,12 @@ ini_set('display_startup_errors', 1);
 // ===== CONFIGURATION DE LA BASE DE DONNÉES =====
 // Nom confirmé par ton dump phpMyAdmin (gestion_soutenance__1_.sql).
 // Si tu importes ce dump sous un autre nom de base, adapte cette ligne.
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'gestion_soutenance');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+// Les define() sont protégés : un fichier auto-prepend (mode
+// maintenance) peut déjà avoir défini ces constantes.
+if (!defined('DB_HOST')) { define('DB_HOST', 'localhost'); }
+if (!defined('DB_NAME')) { define('DB_NAME', 'gestion_soutenance'); }
+if (!defined('DB_USER')) { define('DB_USER', 'root'); }
+if (!defined('DB_PASS')) { define('DB_PASS', ''); }
 
 // ===== URL DE BASE =====
 // Détection automatique de l'URL de base.
@@ -46,6 +48,27 @@ if (isset($_SERVER['DOCUMENT_ROOT']) && !empty($_SERVER['DOCUMENT_ROOT'])) {
 
 define('BASE_URL', $protocol . $host . $base_path);
 define('BASE_PATH', realpath(__DIR__ . '/..') . '/');
+
+// ===== GESTION DES PHOTOS (profil / pharmacie) =====
+require_once __DIR__ . '/images.php';
+
+// ===== CONFIGURATION EMAIL (SMTP) =====
+// Utilisée par includes/mailer.php (PHPMailer) pour l'envoi des emails.
+// Exemples de serveurs SMTP :
+//   - Gmail    : smtp.gmail.com, port 587, TLS (active l'authentification
+//                à deux facteurs, puis crée un "mot de passe d'application")
+//   - Outlook  : smtp-mail.outlook.com, port 587, STARTTLS
+//   - Mailtrap : sandbox.smtp.mailtrap.io, port 587 (tests uniquement)
+// MAIL_ENABLE = false ⇒ mode démo : aucun email envoyé, le lien de
+// réinitialisation est affiché à l'écran (environnement local).
+define('MAIL_ENABLE', true);
+define('MAIL_HOST', 'smtp.gmail.com');
+define('MAIL_PORT', 587);
+define('MAIL_USERNAME', 'votre.email@gmail.com');
+define('MAIL_PASSWORD', 'mot-de-passe-application');
+define('MAIL_ENCRYPTION', 'tls'); // 'tls', 'ssl' ou '' (aucun)
+define('MAIL_FROM', 'votre.email@gmail.com');
+define('MAIL_FROM_NAME', 'PharmaGeo');
 
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
@@ -112,6 +135,47 @@ function getRoleUtilisateur() {
 }
 
 /**
+ * Lien vers le tableau de bord selon le rôle
+ */
+function lienDashboard() {
+    switch ($_SESSION['role'] ?? '') {
+        case 'administrateur': return 'admin/dashboard.php';
+        case 'pharmacien': return 'pharmacien/dashboard.php';
+        default: return 'pages/patient/dashboard.php';
+    }
+}
+
+/**
+ * Lien vers le profil selon le rôle
+ */
+function lienProfil() {
+    switch ($_SESSION['role'] ?? '') {
+        case 'administrateur': return 'admin/profil.php';
+        case 'pharmacien': return 'pharmacien/profil.php';
+        default: return 'pages/patient/profil.php';
+    }
+}
+
+/**
+ * Lien vers l'historique selon le rôle
+ */
+function lienHistorique() {
+    switch ($_SESSION['role'] ?? '') {
+        case 'administrateur': return 'admin/logs.php';
+        case 'pharmacien': return 'pharmacien/historique_stocks.php';
+        default: return 'pages/patient/historique.php';
+    }
+}
+
+/**
+ * Lien vers la liste des notifications. La page est commune à tous les
+ * rôles : elle n'affiche que les notifications de la personne connectée.
+ */
+function lienNotifications() {
+    return 'notifications.php';
+}
+
+/**
  * Rediriger si non connecté
  */
 function requireAuth() {
@@ -136,7 +200,7 @@ function requireRole($role) {
  * Fonction de debug
  */
 function debug($data, $die = false) {
-    echo '<pre style="background: #f4f4f4; padding: 15px; border: 2px solid #e74c3c; border-radius: 8px; margin: 10px; font-size: 14px; max-height: 500px; overflow: auto;">';
+    echo '<pre style="background: #F0FDF4; padding: 15px; border: 2px solid #DC2626; border-radius: 8px; margin: 10px; font-size: 14px; max-height: 500px; overflow: auto;">';
     if (is_array($data) || is_object($data)) {
         print_r($data);
     } else {
@@ -175,13 +239,16 @@ function showAlert($message, $type = 'info', $dismissible = true) {
 }
 
 /**
- * Formater la distance
+ * Formater une distance.
+ *
+ * @deprecated Utiliser geoFormaterDistance() (includes/geo.php), qui travaille
+ *             en mètres et applique le format retenu : arrondi à 10 m sous
+ *             1 km, une décimale avec virgule au-delà. Cette fonction est
+ *             conservée pour compatibilité et délègue à celle-ci.
  */
 function formatDistance($km) {
-    if ($km < 1) {
-        return round($km * 1000) . ' m';
-    }
-    return number_format($km, 2, ',', ' ') . ' km';
+    if ($km === null || !is_numeric($km)) return '';
+return (string)geoFormaterDistance((float)$km * 1000);
 }
 
 /**

@@ -11,6 +11,9 @@ ini_set('display_errors', 1);
 // ===== DÉFINITION DES CONSTANTES =====
 define('BASE_URL', 'http://localhost/pharmageo/');
 
+// ===== GESTION DES IMAGES (photos de profil) =====
+require_once __DIR__ . '/../includes/images.php';
+
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
     $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
@@ -206,6 +209,597 @@ try {
     $sante_plateforme = ['taux_disponibilite' => 0, 'taux_validation_pharmaciens' => 0, 'taux_actif_utilisateurs' => 0];
 }
 
+// ===== EXPORT PDF / EXCEL =====
+if (isset($_GET['export']) && in_array($_GET['export'], ['pdf', 'excel', 'docx'], true)) {
+
+    // ===== DONNÉES POUR L'EXPORT =====
+    $export_sections = [];
+
+    $export_sections[] = [
+        'title'   => 'Statistiques générales',
+        'columns' => ['Indicateur', 'Valeur'],
+        'rows'    => [
+            ['Utilisateurs',        number_format($stats_generales['total_utilisateurs'] ?? 0)],
+            ['Patients',            number_format($stats_generales['total_patients'] ?? 0)],
+            ['Pharmaciens',         number_format($stats_generales['total_pharmaciens'] ?? 0)],
+            ['Administrateurs',     number_format($stats_generales['total_administrateurs'] ?? 0)],
+            ['Pharmacies',          number_format($stats_generales['total_pharmacies'] ?? 0)],
+            ['Pharmacies actives',  number_format($stats_generales['pharmacies_actives'] ?? 0)],
+            ['Pharmacies en attente', number_format($stats_generales['pharmacies_attente'] ?? 0)],
+            ['Pharmacies suspendues', number_format($stats_generales['pharmacies_suspendues'] ?? 0)],
+            ['Médicaments',         number_format($stats_generales['total_medicaments'] ?? 0)],
+            ['Catégories',          number_format($stats_generales['total_categories'] ?? 0)],
+            ['Réservations',        number_format($stats_generales['total_reservations'] ?? 0)],
+            ['Recherches',          number_format($stats_generales['total_recherches'] ?? 0)],
+        ],
+    ];
+
+    $export_sections[] = [
+        'title'   => 'Statut des réservations',
+        'columns' => ['Statut', 'Nombre'],
+        'rows'    => [
+            ['En attente', number_format($stats_reservations['en_attente'] ?? 0)],
+            ['Confirmées', number_format($stats_reservations['confirmees'] ?? 0)],
+            ['Refusées',   number_format($stats_reservations['refusees'] ?? 0)],
+            ['Retirées',   number_format($stats_reservations['retirees'] ?? 0)],
+            ['Annulées',   number_format($stats_reservations['annulees'] ?? 0)],
+            ['Expirées',   number_format($stats_reservations['expirees'] ?? 0)],
+        ],
+    ];
+
+    $export_sections[] = [
+        'title'   => 'Statut des stocks',
+        'columns' => ['Statut', 'Nombre'],
+        'rows'    => [
+            ['Disponible',   number_format($stats_stocks['disponible'] ?? 0)],
+            ['Stock faible', number_format($stats_stocks['stock_faible'] ?? 0)],
+            ['Rupture',      number_format($stats_stocks['rupture'] ?? 0)],
+            ['Total',        number_format($stats_stocks['total'] ?? 0)],
+        ],
+    ];
+
+    $evo_rows = [];
+    foreach ($evolution_mensuelle as $e) {
+        $evo_rows[] = [
+            $e['mois'] ?? '',
+            (int)($e['total_inscriptions'] ?? 0),
+            (int)($e['patients'] ?? 0),
+            (int)($e['pharmaciens'] ?? 0),
+            (int)($e['admins'] ?? 0)
+        ];
+    }
+    $export_sections[] = [
+        'title'   => 'Évolution des inscriptions (12 derniers mois)',
+        'columns' => ['Mois', 'Inscriptions', 'Patients', 'Pharmaciens', 'Admins'],
+        'rows'    => $evo_rows
+    ];
+
+    $res_rows = [];
+    foreach ($reservations_par_mois as $r) {
+        $res_rows[] = [
+            $r['mois'] ?? '',
+            (int)($r['total'] ?? 0),
+            (int)($r['confirmees'] ?? 0),
+            (int)($r['refusees'] ?? 0)
+        ];
+    }
+    $export_sections[] = [
+        'title'   => 'Réservations par mois (12 derniers mois)',
+        'columns' => ['Mois', 'Total', 'Confirmées', 'Refusées'],
+        'rows'    => $res_rows
+    ];
+
+    $pop_rows = [];
+    foreach ($medicaments_populaires as $m) {
+        $pop_rows[] = [$m['Nom_commercial'] ?? '', $m['DCI'] ?? '', (int)($m['total_recherches'] ?? 0)];
+    }
+    $export_sections[] = [
+        'title'   => 'Médicaments les plus recherchés',
+        'columns' => ['Nom commercial', 'DCI', 'Recherches'],
+        'rows'    => $pop_rows
+    ];
+
+    $resv_rows = [];
+    foreach ($medicaments_reserves as $m) {
+        $resv_rows[] = [$m['Nom_commercial'] ?? '', $m['DCI'] ?? '', (int)($m['total_reservations'] ?? 0)];
+    }
+    $export_sections[] = [
+        'title'   => 'Médicaments les plus réservés',
+        'columns' => ['Nom commercial', 'DCI', 'Réservations'],
+        'rows'    => $resv_rows
+    ];
+
+    $ph_rows = [];
+    foreach ($pharmacies_actives as $p) {
+        $ph_rows[] = [
+            $p['Nom'] ?? '', $p['Quartier'] ?? '', $p['Commune'] ?? '',
+            (int)($p['total_reservations'] ?? 0),
+            (int)($p['total_patients'] ?? 0)
+        ];
+    }
+    $export_sections[] = [
+        'title'   => 'Pharmacies les plus actives',
+        'columns' => ['Nom', 'Quartier', 'Commune', 'Réservations', 'Patients'],
+        'rows'    => $ph_rows
+    ];
+
+    $comm_rows = [];
+    foreach ($repartition_communes as $c) {
+        $comm_rows[] = [$c['Commune'] ?? '', (int)($c['total'] ?? 0)];
+    }
+    $export_sections[] = [
+        'title'   => 'Répartition des pharmacies par commune',
+        'columns' => ['Commune', 'Pharmacies'],
+        'rows'    => $comm_rows
+    ];
+
+    $sem_rows = [];
+    foreach ($activite_semaine as $d) {
+        $sem_rows[] = [$d['jour'] ?? '', (int)($d['total'] ?? 0)];
+    }
+    $export_sections[] = [
+        'title'   => 'Activité par jour de la semaine',
+        'columns' => ['Jour', 'Réservations'],
+        'rows'    => $sem_rows
+    ];
+
+    $export_sections[] = [
+        'title'   => 'Taux de conversion & santé de la plateforme',
+        'columns' => ['Indicateur', 'Valeur'],
+        'rows'    => [
+            ['Recherches vers réservations (%)',       number_format($taux_conversion['recherches_vers_reservations'] ?? 0, 2)],
+            ['Réservations vers confirmations (%)',    number_format($taux_conversion['reservations_vers_confirmations'] ?? 0, 2)],
+            ['Taux de disponibilité des stocks (%)',   number_format($sante_plateforme['taux_disponibilite'] ?? 0, 2)],
+            ['Taux de validation des pharmaciens (%)', number_format($sante_plateforme['taux_validation_pharmaciens'] ?? 0, 2)],
+        ],
+    ];
+
+    $date_export = date('d/m/Y H:i');
+
+    // ===== EXPORT EXCEL (.xlsx) =====
+    if ($_GET['export'] === 'excel') {
+        $esc = function($s) { return htmlspecialchars((string)$s, ENT_XML1 | ENT_QUOTES, 'UTF-8'); };
+        $colL = function($n) { $r = ''; while ($n >= 0) { $r = chr(65 + ($n % 26)) . $r; $n = floor($n / 26) - 1; } return $r; };
+
+        $maxCols = 2;
+        foreach ($export_sections as $sec) { $maxCols = max($maxCols, count($sec['columns'])); }
+
+        $cW = array_fill(0, $maxCols, 10);
+        foreach ($export_sections as $sec) {
+            $nc = count($sec['columns']);
+            for ($i = 0; $i < $nc; $i++) { $cW[$i] = max($cW[$i], mb_strlen($sec['columns'][$i])); }
+            foreach ($sec['rows'] as $row) {
+                for ($i = 0; $i < $nc; $i++) { $cW[$i] = max($cW[$i], mb_strlen((string)($row[$i] ?? ''))); }
+            }
+        }
+        for ($i = 0; $i < $maxCols; $i++) { $cW[$i] = min(55, max(12, ceil($cW[$i] * 1.2))); }
+
+        $colsXml = '<cols>';
+        for ($i = 0; $i < $maxCols; $i++) {
+            $colsXml .= '<col min="' . ($i + 1) . '" max="' . ($i + 1) . '" width="' . $cW[$i] . '" customWidth="1"/>';
+        }
+        $colsXml .= '</cols>';
+
+        $rN = 1; $merges = []; $sd = '';
+        $lastCL = $colL($maxCols - 1);
+
+        $merges[] = "A{$rN}:{$lastCL}{$rN}";
+        $sd .= '<row r="' . $rN . '" ht="30"><c r="A' . $rN . '" t="inlineStr" s="1"><is><t>PharmaGeo — Rapport de Statistiques</t></is></c>';
+        for ($i = 1; $i < $maxCols; $i++) { $sd .= '<c r="' . $colL($i) . $rN . '" t="inlineStr" s="1"><is><t></t></is></c>'; }
+        $sd .= '</row>'; $rN++;
+
+        $merges[] = "A{$rN}:{$lastCL}{$rN}";
+        $sd .= '<row r="' . $rN . '"><c r="A' . $rN . '" t="inlineStr" s="2"><is><t>' . $esc('Généré le ' . $date_export) . '</t></is></c>';
+        for ($i = 1; $i < $maxCols; $i++) { $sd .= '<c r="' . $colL($i) . $rN . '" t="inlineStr" s="2"><is><t></t></is></c>'; }
+        $sd .= '</row>'; $rN += 2;
+
+        foreach ($export_sections as $sec) {
+            $nc = count($sec['columns']);
+            $merges[] = "A{$rN}:{$lastCL}{$rN}";
+            $sd .= '<row r="' . $rN . '" ht="22"><c r="A' . $rN . '" t="inlineStr" s="3"><is><t>' . $esc($sec['title']) . '</t></is></c>';
+            for ($i = 1; $i < $maxCols; $i++) { $sd .= '<c r="' . $colL($i) . $rN . '" t="inlineStr" s="3"><is><t></t></is></c>'; }
+            $sd .= '</row>'; $rN++;
+
+            $sd .= '<row r="' . $rN . '">';
+            for ($i = 0; $i < $nc; $i++) { $sd .= '<c r="' . $colL($i) . $rN . '" t="inlineStr" s="4"><is><t>' . $esc($sec['columns'][$i]) . '</t></is></c>'; }
+            for ($i = $nc; $i < $maxCols; $i++) { $sd .= '<c r="' . $colL($i) . $rN . '" t="inlineStr" s="4"><is><t></t></is></c>'; }
+            $sd .= '</row>'; $rN++;
+
+            $ri = 0;
+            foreach ($sec['rows'] as $row) {
+                $st = ($ri % 2 === 0) ? 5 : 6;
+                $sd .= '<row r="' . $rN . '">';
+                for ($i = 0; $i < $nc; $i++) {
+                    $sd .= '<c r="' . $colL($i) . $rN . '" t="inlineStr" s="' . $st . '"><is><t>' . $esc((string)($row[$i] ?? '')) . '</t></is></c>';
+                }
+                for ($i = $nc; $i < $maxCols; $i++) { $sd .= '<c r="' . $colL($i) . $rN . '" t="inlineStr" s="' . $st . '"><is><t></t></is></c>'; }
+                $sd .= '</row>'; $rN++; $ri++;
+            }
+            $rN++;
+        }
+
+        $mergeXml = '<mergeCells count="' . count($merges) . '">';
+        foreach ($merges as $m) { $mergeXml .= '<mergeCell ref="' . $m . '"/>'; }
+        $mergeXml .= '</mergeCells>';
+
+        $sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+' . $colsXml . '
+<sheetData>' . $sd . '</sheetData>
+' . $mergeXml . '
+<pageMargins left="0.5" right="0.5" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>
+</worksheet>';
+
+        $stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="6">
+<font><sz val="11"/><name val="Calibri"/></font>
+<font><b/><sz val="11"/><name val="Calibri"/></font>
+<font><b/><sz val="16"/><color rgb="FF2AC32A"/><name val="Calibri"/></font>
+<font><b/><sz val="12"/><color rgb="FF333333"/><name val="Calibri"/></font>
+<font><i/><sz val="11"/><color rgb="FF666666"/><name val="Calibri"/></font>
+<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
+</fonts>
+<fills count="5">
+<fill><patternFill patternType="none"/></fill>
+<fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FF2AC32A"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFE8F5E9"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFF5F5F5"/></patternFill></fill>
+</fills>
+<borders count="2">
+<border><left/><right/><top/><bottom/><diagonal/></border>
+<border>
+<left style="thin"><color auto="1"/></left>
+<right style="thin"><color auto="1"/></right>
+<top style="thin"><color auto="1"/></top>
+<bottom style="thin"><color auto="1"/></bottom>
+<diagonal/>
+</border>
+</borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="7">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center"/></xf>
+<xf numFmtId="0" fontId="3" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+<xf numFmtId="0" fontId="5" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
+<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>
+</cellXfs>
+</styleSheet>';
+
+        $wbXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="Statistiques" sheetId="1" r:id="rId1"/></sheets></workbook>';
+
+        $ctXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>';
+
+        $relsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>';
+
+        $wbRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>';
+
+        $tmp = tempnam(sys_get_temp_dir(), 'xlsx_');
+        $zip = new ZipArchive();
+        if ($zip->open($tmp, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true) {
+            $zip->addFromString('[Content_Types].xml', $ctXml);
+            $zip->addFromString('_rels/.rels', $relsXml);
+            $zip->addFromString('xl/workbook.xml', $wbXml);
+            $zip->addFromString('xl/_rels/workbook.xml.rels', $wbRels);
+            $zip->addFromString('xl/styles.xml', $stylesXml);
+            $zip->addFromString('xl/worksheets/sheet1.xml', $sheetXml);
+            $zip->close();
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; charset=utf-8');
+            header('Content-Disposition: attachment; filename="statistiques_pharmageo_' . date('Ymd_His') . '.xlsx"');
+            header('Cache-Control: max-age=0');
+            header('Pragma: public');
+            readfile($tmp);
+            @unlink($tmp);
+            exit;
+        }
+        @unlink($tmp);
+    }
+
+    // ===== EXPORT WORD (.docx) =====
+    if ($_GET['export'] === 'docx') {
+        $esc = function($s) { return htmlspecialchars((string)$s, ENT_XML1 | ENT_QUOTES, 'UTF-8'); };
+
+        $bodyXml = '';
+
+        // Titre
+        $bodyXml .= '<w:p><w:pPr><w:jc w:val="center"/></w:pPr>';
+        $bodyXml .= '<w:r><w:rPr><w:b/><w:sz w:val="36"/><w:szCs w:val="36"/><w:color w:val="2AC32A"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>';
+        $bodyXml .= '<w:t>' . $esc('PharmaGeo — Rapport de Statistiques') . '</w:t></w:r></w:p>';
+
+        // Sous-titre
+        $bodyXml .= '<w:p><w:pPr><w:jc w:val="center"/></w:pPr>';
+        $bodyXml .= '<w:r><w:rPr><w:i/><w:color w:val="666666"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>';
+        $bodyXml .= '<w:t>' . $esc('Généré le ' . $date_export) . '</w:t></w:r></w:p>';
+
+        $bodyXml .= '<w:p/>';
+
+        foreach ($export_sections as $sec) {
+            $nc = count($sec['columns']);
+
+            // En-tête de section
+            $bodyXml .= '<w:p><w:pPr><w:spacing w:before="220" w:after="100"/></w:pPr>';
+            $bodyXml .= '<w:r><w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/><w:color w:val="2AC32A"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>';
+            $bodyXml .= '<w:t>' . $esc($sec['title']) . '</w:t></w:r></w:p>';
+
+            // Table
+            $bodyXml .= '<w:tbl><w:tblPr>';
+            $bodyXml .= '<w:tblW w:w="5000" w:type="pct"/>';
+            $bodyXml .= '<w:tblBorders>';
+            $bodyXml .= '<w:top w:val="single" w:sz="4" w:space="0" w:color="BFBFBF"/>';
+            $bodyXml .= '<w:left w:val="single" w:sz="4" w:space="0" w:color="BFBFBF"/>';
+            $bodyXml .= '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="BFBFBF"/>';
+            $bodyXml .= '<w:right w:val="single" w:sz="4" w:space="0" w:color="BFBFBF"/>';
+            $bodyXml .= '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="BFBFBF"/>';
+            $bodyXml .= '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="BFBFBF"/>';
+            $bodyXml .= '</w:tblBorders>';
+            $bodyXml .= '<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>';
+            $bodyXml .= '</w:tblPr>';
+
+            $bodyXml .= '<w:tblGrid>';
+            $cwg = intval(9026 / $nc);
+            for ($i = 0; $i < $nc; $i++) { $bodyXml .= '<w:gridCol w:w="' . $cwg . '"/>'; }
+            $bodyXml .= '</w:tblGrid>';
+
+            // Ligne d'en-tête (fond vert, texte blanc, gras)
+            $bodyXml .= '<w:tr>';
+            foreach ($sec['columns'] as $h) {
+                $bodyXml .= '<w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="2AC32A"/></w:tcPr>';
+                $bodyXml .= '<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr>';
+                $bodyXml .= '<w:r><w:rPr><w:b/><w:color w:val="FFFFFF"/><w:sz w:val="20"/><w:szCs w:val="20"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>';
+                $bodyXml .= '<w:t>' . $esc($h) . '</w:t></w:r></w:p></w:tc>';
+            }
+            $bodyXml .= '</w:tr>';
+
+            // Lignes de données
+            $ri = 0;
+            foreach ($sec['rows'] as $row) {
+                $bg = ($ri % 2 === 1) ? 'F5F5F5' : 'FFFFFF';
+                $bodyXml .= '<w:tr>';
+                foreach ($row as $cell) {
+                    $bodyXml .= '<w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="' . $bg . '"/></w:tcPr>';
+                    $bodyXml .= '<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr>';
+                    $bodyXml .= '<w:r><w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>';
+                    $bodyXml .= '<w:t>' . $esc((string)$cell) . '</w:t></w:r></w:p></w:tc>';
+                }
+                $bodyXml .= '</w:tr>';
+                $ri++;
+            }
+
+            $bodyXml .= '</w:tbl>';
+            $bodyXml .= '<w:p/>';
+        }
+
+        $documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<w:body>' . $bodyXml . '
+<w:sectPr>
+<w:pgSz w:w="11906" w:h="16838"/>
+<w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="720" w:footer="720"/>
+</w:sectPr>
+</w:body>
+</w:document>';
+
+        $ctDocx = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>';
+
+        $relsDocx = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>';
+
+        $docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
+
+        $tmp = tempnam(sys_get_temp_dir(), 'docx_');
+        $zip = new ZipArchive();
+        if ($zip->open($tmp, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true) {
+            $zip->addFromString('[Content_Types].xml', $ctDocx);
+            $zip->addFromString('_rels/.rels', $relsDocx);
+            $zip->addFromString('word/document.xml', $documentXml);
+            $zip->addFromString('word/_rels/document.xml.rels', $docRels);
+            $zip->close();
+            header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document; charset=utf-8');
+            header('Content-Disposition: attachment; filename="statistiques_pharmageo_' . date('Ymd_His') . '.docx"');
+            header('Cache-Control: max-age=0');
+            header('Pragma: public');
+            readfile($tmp);
+            @unlink($tmp);
+            exit;
+        }
+        @unlink($tmp);
+    }
+
+    // ===== EXPORT PDF =====
+    if (!function_exists('export_pdf_esc')) {
+        function export_pdf_esc($s) {
+            $s = (string)($s ?? '');
+            $enc = @iconv('UTF-8', 'ISO-8859-1//TRANSLIT', $s);
+            if ($enc === false) { $enc = ''; }
+            $enc = str_replace(["\r", "\n"], ' ', $enc);
+            return str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $enc);
+        }
+    }
+
+    class PharmaStatPdf {
+        private $buff = '';
+        private $offsets = [];
+        private $count = 0;
+        private $font1 = 0;
+        private $font2 = 0;
+        private $contents = [];
+        private $content = '';
+        private $y = 780;
+        private $date_export = '';
+
+        public function __construct($date_export) {
+            $this->date_export = $date_export;
+            $this->font1 = $this->obj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+            $this->font2 = $this->obj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
+        }
+
+        private function obj($body) {
+            $this->count++;
+            $this->offsets[$this->count] = 9 + strlen($this->buff);
+            $this->buff .= $this->count . " 0 obj\n" . $body . "\nendobj\n";
+            return $this->count;
+        }
+
+        private function flushPage() {
+            if ($this->content === '') { return; }
+            $contentObj = $this->obj("<< /Length " . strlen($this->content) . " >>\nstream\n" . $this->content . "endstream");
+            $this->contents[] = $contentObj;
+            $this->content = '';
+            $this->y = 780;
+        }
+
+        public function ensure($h) {
+            if ($this->y - $h < 50) { $this->flushPage(); }
+        }
+
+        public function text($x, $y, $s, $bold = false, $size = 9.5) {
+            $f = $bold ? $this->font2 : $this->font1;
+            $this->content .= sprintf("BT /F%d %.1f Tf %.1f %.1f Td (%s) Tj ET\n", $f, $size, $x, $y, export_pdf_esc($s));
+        }
+
+        public function line($x1, $y1, $x2, $y2) {
+            $this->content .= sprintf("%.1f %.1f m %.1f %.1f l S\n", $x1, $y1, $x2, $y2);
+        }
+
+        public function renderHeader() {
+            $this->text(50, $this->y, 'PharmaGeo — Plateforme de localisation des pharmacies', true, 13);
+            $this->y -= 6;
+            $this->text(50, $this->y, 'Rapport de statistiques spécialisé', false, 10);
+            $this->y -= 4;
+            $this->text(50, $this->y, 'Généré le ' . $this->date_export, false, 9);
+            $this->y -= 8;
+            $this->line(50, $this->y, 545, $this->y);
+            $this->y -= 16;
+        }
+
+        public function sectionTitle($title) {
+            $this->ensure(34);
+            $this->text(50, $this->y, $title, true, 11);
+            $this->y -= 4;
+            $this->line(50, $this->y, 545, $this->y);
+            $this->y -= 13;
+        }
+
+        public function table($sec) {
+            $cols = $sec['columns'];
+            $rows = $sec['rows'];
+            $n = count($cols);
+            $pageW = 495;
+
+            $lens = [];
+            foreach ($cols as $i => $h) { if ($i < $n) $lens[$i] = mb_strlen($h); }
+            foreach ($rows as $row) {
+                foreach ($row as $i => $cell) {
+                    $L = mb_strlen((string)$cell);
+                    if ($i < $n && $L > ($lens[$i] ?? 0)) { $lens[$i] = $L; }
+                }
+            }
+            foreach ($lens as $i => $L) { $lens[$i] = min($L, 38); }
+            $totalL = array_sum($lens);
+            if ($totalL <= 0) { $totalL = $n; }
+
+            $widths = [];
+            foreach ($lens as $i => $L) { $widths[$i] = max(35, round(($L / $totalL) * $pageW)); }
+            $sumW = array_sum($widths);
+            if ($sumW > $pageW) {
+                $k = $pageW / $sumW;
+                foreach ($widths as $i => $w) { $widths[$i] = max(18, round($w * $k)); }
+                $sumW = array_sum($widths);
+            }
+            $xs = [0 => 50];
+            for ($i = 1; $i < $n; $i++) { $xs[$i] = $xs[$i - 1] + $widths[$i - 1]; }
+
+            $this->ensure(16);
+            foreach ($cols as $i => $h) {
+                $this->text($xs[$i] + 2, $this->y, $h, true, 9.5);
+            }
+            $this->y -= 4;
+            $this->line(50, $this->y, 50 + min($sumW, $pageW), $this->y);
+            $this->y -= 12;
+
+            foreach ($rows as $row) {
+                $this->ensure(15);
+                foreach ($row as $i => $cell) {
+                    if ($i < $n) { $this->text($xs[$i] + 2, $this->y, (string)$cell, false, 9); }
+                }
+                $this->y -= 13;
+            }
+            $this->y -= 5;
+        }
+
+        public function output() {
+            $this->flushPage();
+            if (count($this->contents) === 0) {
+                $this->content = '';
+                $this->flushPage();
+            }
+            $N = count($this->contents);
+            $pagesObjNum = 2 + 2 * $N + 1;
+
+            $kids = [];
+            for ($i = 0; $i < $N; $i++) {
+                $c = $this->contents[$i];
+                $p = $this->obj("<< /Type /Page /Parent $pagesObjNum 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 {$this->font1} 0 R /F2 {$this->font2} 0 R >> >> /Contents $c 0 R >>");
+                $kids[] = "$p 0 R";
+            }
+            $pagesObj = $this->obj("<< /Type /Pages /Kids [" . implode(' ', $kids) . "] /Count $N >>");
+            $catalogObj = $this->obj("<< /Type /Catalog /Pages $pagesObj 0 R >>");
+
+            $pdf = "%PDF-1.4\n";
+            $pdf .= $this->buff;
+            $count = $this->count;
+            $xrefStart = strlen($pdf);
+            $pdf .= "xref\n0 " . ($count + 1) . "\n0000000000 65535 f \n";
+            for ($i = 1; $i <= $count; $i++) {
+                $pdf .= sprintf("%010d 00000 n \n", $this->offsets[$i]);
+            }
+            $pdf .= "trailer\n<< /Size " . ($count + 1) . " /Root $catalogObj 0 R >>\nstartxref\n$xrefStart\n%%EOF";
+            return $pdf;
+        }
+    }
+
+    header('Content-Type: application/pdf; charset=utf-8');
+    header('Content-Disposition: attachment; filename="statistiques_pharmageo_' . date('Ymd_His') . '.pdf"');
+    header('Cache-Control: max-age=0');
+    header('Pragma: public');
+
+    $pdf = new PharmaStatPdf($date_export);
+    $pdf->renderHeader();
+    foreach ($export_sections as $sec) {
+        $pdf->sectionTitle($sec['title']);
+        $pdf->table($sec);
+    }
+    echo $pdf->output();
+    exit;
+}
+
 $page_title = 'Statistiques - Administration PharmaGeo';
 ?>
 <!DOCTYPE html>
@@ -230,18 +824,18 @@ $page_title = 'Statistiques - Administration PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --light-bg: #f0f2f5;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --light-bg: #F0FDF4;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-sm: 0 2px 20px rgba(0,0,0,0.04);
             --shadow-md: 0 8px 40px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
             --shadow-xl: 0 30px 80px rgba(0,0,0,0.16);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
-            --shadow-glow-orange: 0 8px 40px rgba(200, 120, 30, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
+            --shadow-glow-orange: 0 8px 40px rgba(21,128,61, 0.20);
             --radius: 16px;
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -290,6 +884,8 @@ $page_title = 'Statistiques - Administration PharmaGeo';
             left: 0;
             width: 260px;
             height: 100vh;
+            display: flex;
+            flex-direction: column;
             background: var(--dark-text);
             color: white;
             padding: 20px 0;
@@ -302,22 +898,28 @@ $page_title = 'Statistiques - Administration PharmaGeo';
         .sidebar::-webkit-scrollbar { width: 4px; }
         .sidebar::-webkit-scrollbar-thumb { background: var(--primary-green); border-radius: 4px; }
 
-        .sidebar .brand {
-            text-align: center;
-            padding: 20px 15px 30px;
+.sidebar .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 16px;
             border-bottom: 1px solid rgba(255,255,255,0.05);
         }
 
-        .sidebar .brand .brand-icon {
+.sidebar .brand .brand-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
-            padding: 12px 15px;
-            border-radius: 14px;
-            font-size: 2rem;
-            display: inline-block;
-            margin-bottom: 10px;
-        }
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+         color: #fff;}
 
-        .sidebar .brand h4 {
+.sidebar .brand h4 {
+            font-size: 1.1rem;
             font-weight: 800;
             margin: 0;
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
@@ -332,7 +934,7 @@ $page_title = 'Statistiques - Administration PharmaGeo';
             display: block;
         }
 
-        .sidebar .nav-menu { padding: 20px 15px; }
+        .sidebar .nav-menu { padding: 20px 15px; flex: 1; }
 
         .sidebar .nav-menu .nav-label {
             font-size: 0.7rem;
@@ -367,7 +969,7 @@ $page_title = 'Statistiques - Administration PharmaGeo';
         }
 
         .sidebar .nav-menu .nav-item.active {
-            background: linear-gradient(135deg, rgba(42,195,42,0.2), rgba(200,120,30,0.2));
+            background: linear-gradient(135deg, rgba(22,163,74,0.2), rgba(21,128,61,0.2));
             color: var(--primary-green);
             border-left: 3px solid var(--primary-green);
         }
@@ -375,10 +977,6 @@ $page_title = 'Statistiques - Administration PharmaGeo';
         .sidebar .nav-menu .nav-item i { width: 20px; text-align: center; font-size: 1rem; }
 
         .sidebar .user-profile {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
             padding: 20px;
             border-top: 1px solid rgba(255,255,255,0.05);
             display: flex;
@@ -402,6 +1000,10 @@ $page_title = 'Statistiques - Administration PharmaGeo';
         .sidebar .user-profile .user-info { flex: 1; }
         .sidebar .user-profile .user-info .name { font-weight: 600; font-size: 0.9rem; color: white; }
         .sidebar .user-profile .user-info .role { font-size: 0.7rem; color: rgba(255,255,255,0.4); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
 
         /* ===== MAIN CONTENT ===== */
         .main-content {
@@ -467,7 +1069,7 @@ $page_title = 'Statistiques - Administration PharmaGeo';
 
         .top-bar .page-actions .btn-action.btn-primary-custom:hover {
             transform: translateY(-2px);
-            box-shadow: 0 12px 40px rgba(42,195,42,0.3);
+            box-shadow: 0 12px 40px rgba(22,163,74,0.3);
         }
 
         .top-bar .page-actions .btn-action.btn-outline-custom {
@@ -576,12 +1178,12 @@ $page_title = 'Statistiques - Administration PharmaGeo';
             font-size: 1.1rem;
         }
 
-        .stat-card .stat-icon.green { background: rgba(42,195,42,0.1); color: var(--primary-green); }
-        .stat-card .stat-icon.orange { background: rgba(200,120,30,0.1); color: var(--primary-orange); }
-        .stat-card .stat-icon.blue { background: rgba(52,152,219,0.1); color: #3498db; }
-        .stat-card .stat-icon.purple { background: rgba(155,89,182,0.1); color: #9b59b6; }
-        .stat-card .stat-icon.red { background: rgba(231,76,60,0.1); color: #e74c3c; }
-        .stat-card .stat-icon.teal { background: rgba(26,188,156,0.1); color: #1abc9c; }
+        .stat-card .stat-icon.green { background: rgba(22,163,74,0.1); color: var(--primary-green); }
+        .stat-card .stat-icon.orange { background: rgba(21,128,61,0.1); color: var(--primary-orange); }
+        .stat-card .stat-icon.blue { background: rgba(22,83,52,0.1); color: #166534; }
+        .stat-card .stat-icon.purple { background: rgba(155,89,182,0.1); color: #1F2937; }
+        .stat-card .stat-icon.red { background: rgba(220,38,38,0.1); color: #DC2626; }
+        .stat-card .stat-icon.teal { background: rgba(26,188,156,0.1); color: #16A34A; }
 
         .stat-card .stat-number {
             font-size: 1.8rem;
@@ -647,14 +1249,14 @@ $page_title = 'Statistiques - Administration PharmaGeo';
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--gray-text);
-            border-bottom: 2px solid #f0f0f0;
+            border-bottom: 2px solid #F0FDF4;
             padding: 12px 10px;
         }
 
         .table-custom tbody td {
             padding: 12px 10px;
             vertical-align: middle;
-            border-bottom: 1px solid #f5f5f5;
+            border-bottom: 1px solid #F0FDF4;
             font-size: 0.9rem;
         }
 
@@ -663,7 +1265,7 @@ $page_title = 'Statistiques - Administration PharmaGeo';
         }
 
         .table-custom tbody tr:hover {
-            background: rgba(42,195,42,0.02);
+            background: rgba(22,163,74,0.02);
         }
 
         .badge-status {
@@ -673,10 +1275,10 @@ $page_title = 'Statistiques - Administration PharmaGeo';
             font-weight: 600;
         }
 
-        .badge-status.success { background: rgba(42,195,42,0.1); color: var(--primary-green); }
-        .badge-status.warning { background: rgba(200,120,30,0.1); color: var(--primary-orange); }
-        .badge-status.danger { background: rgba(231,76,60,0.1); color: #e74c3c; }
-        .badge-status.info { background: rgba(52,152,219,0.1); color: #3498db; }
+        .badge-status.success { background: rgba(22,163,74,0.1); color: var(--primary-green); }
+        .badge-status.warning { background: rgba(21,128,61,0.1); color: var(--primary-orange); }
+        .badge-status.danger { background: rgba(220,38,38,0.1); color: #DC2626; }
+        .badge-status.info { background: rgba(22,83,52,0.1); color: #166534; }
 
         /* ===== EMPTY STATE ===== */
         .empty-state {
@@ -717,9 +1319,9 @@ $page_title = 'Statistiques - Administration PharmaGeo';
             .table-custom { font-size: 0.8rem; min-width: 500px; }
             .table-custom thead th,
             .table-custom tbody td { padding: 8px 6px; }
-        }
-    </style>
-    <link rel="stylesheet" href="../assets/css/responsive.css">
+        }    </style>
+    <link rel="stylesheet" href="../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -728,11 +1330,10 @@ $page_title = 'Statistiques - Administration PharmaGeo';
 
     <!-- ===== SIDEBAR ===== -->
     <aside class="sidebar" id="sidebar">
-        <div class="brand">
+        <a href="<?php echo BASE_URL; ?>index.php" class="brand" style="text-decoration: none;">
             <div class="brand-icon"><i class="fas fa-hospital"></i></div>
-            <h4>PharmaGeo</h4>
-            <small>Administration</small>
-        </div>
+            <div><h4>PharmaGeo</h4><small>Administration</small></div>
+        </a>
 
         <nav class="nav-menu">
             <div class="nav-label">Navigation</div>
@@ -778,21 +1379,28 @@ $page_title = 'Statistiques - Administration PharmaGeo';
                 <i class="fas fa-user-edit"></i>
                 <span>Mon profil</span>
             </a>
-            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);">
-                <i class="fas fa-sign-out-alt"></i>
-                <span>Déconnexion</span>
-            </a>
+
         </nav>
 
-        <div class="user-profile">
+        <a class="user-profile" href="<?php echo BASE_URL; ?>admin/profil.php" title="Voir mon profil">
             <div class="avatar">
-                <?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?>
+                <?php if (!empty($_SESSION['photo']) && pharma_image_disponible($_SESSION['photo'])): ?>
+                    <img src="<?php echo htmlspecialchars(pharma_image_url($_SESSION['photo'])); ?>" alt="">
+                <?php else: ?>
+                    <?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?>
+                <?php endif; ?>
             </div>
             <div class="user-info">
                 <div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div>
-                <div class="role"><i class="fas fa-crown me-1" style="color: #f1c40f;"></i> Administrateur</div>
-            </div>
-        </div>
+                <div class="role"><i class="fas fa-crown me-1" style="color: #DC2626;"></i> Administrateur</div>
+            <i class="fas fa-chevron-right profile-chevron"></i>
+        </a>
+    
+    <?php require_once __DIR__ . '/../includes/reinitialiser.php'; echo html_bloc_reinitialiser(); ?>
+    <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.15); margin-top: auto; text-decoration: none;">
+        <i class="fas fa-sign-out-alt"></i>
+        <span>Déconnexion</span>
+    </a>
     </aside>
 
     <!-- ===== MAIN CONTENT ===== -->
@@ -812,8 +1420,8 @@ $page_title = 'Statistiques - Administration PharmaGeo';
                 </div>
             </div>
             <div class="page-actions">
-                <a href="<?php echo BASE_URL; ?>admin/statistiques.php?export=pdf" class="btn-action btn-primary-custom">
-                    <i class="fas fa-file-pdf"></i> Exporter PDF
+                <a href="<?php echo BASE_URL; ?>admin/statistiques.php?export=docx" class="btn-action btn-primary-custom">
+                    <i class="fas fa-file-word"></i> Exporter Word
                 </a>
                 <a href="<?php echo BASE_URL; ?>admin/statistiques.php?export=excel" class="btn-action btn-outline-custom">
                     <i class="fas fa-file-excel"></i> Exporter Excel
@@ -914,7 +1522,7 @@ $page_title = 'Statistiques - Administration PharmaGeo';
                         </div>
                         <div class="col-4">
                             <div class="small text-muted">Rupture</div>
-                            <div class="fw-bold" style="color: #e74c3c;"><?php echo $stats_stocks['rupture'] ?? 0; ?></div>
+                            <div class="fw-bold" style="color: #DC2626;"><?php echo $stats_stocks['rupture'] ?? 0; ?></div>
                         </div>
                     </div>
                 </div>
@@ -976,7 +1584,7 @@ $page_title = 'Statistiques - Administration PharmaGeo';
             <div class="col-lg-6">
                 <div class="section-card">
                     <div class="section-header">
-                        <h5><i class="fas fa-heartbeat" style="color: #e74c3c;"></i> Santé de la plateforme</h5>
+                        <h5><i class="fas fa-heartbeat" style="color: #DC2626;"></i> Santé de la plateforme</h5>
                     </div>
                     <div class="row g-3">
                         <div class="col-4">
@@ -994,7 +1602,7 @@ $page_title = 'Statistiques - Administration PharmaGeo';
                         <div class="col-4">
                             <div class="p-3 bg-light rounded-3 text-center">
                                 <div class="text-muted small">Taux global</div>
-                                <div class="h3 fw-bold" style="color: #3498db;"><?php echo round(($sante_plateforme['taux_disponibilite'] + $sante_plateforme['taux_validation_pharmaciens']) / 2, 2); ?>%</div>
+                                <div class="h3 fw-bold" style="color: #166534;"><?php echo round(($sante_plateforme['taux_disponibilite'] + $sante_plateforme['taux_validation_pharmaciens']) / 2, 2); ?>%</div>
                             </div>
                         </div>
                     </div>
@@ -1200,24 +1808,24 @@ $page_title = 'Statistiques - Administration PharmaGeo';
                         {
                             label: 'Patients',
                             data: evolutionData.map(item => parseInt(item.patients || 0)),
-                            backgroundColor: 'rgba(52,152,219,0.6)',
-                            borderColor: '#3498db',
+                            backgroundColor: 'rgba(22,83,52,0.6)',
+                            borderColor: '#166534',
                             borderWidth: 2,
                             borderRadius: 4
                         },
                         {
                             label: 'Pharmaciens',
                             data: evolutionData.map(item => parseInt(item.pharmaciens || 0)),
-                            backgroundColor: 'rgba(42,195,42,0.6)',
-                            borderColor: 'rgb(42, 195, 42)',
+                            backgroundColor: 'rgba(22,163,74,0.6)',
+                            borderColor: '#16A34A',
                             borderWidth: 2,
                             borderRadius: 4
                         },
                         {
                             label: 'Administrateurs',
                             data: evolutionData.map(item => parseInt(item.admins || 0)),
-                            backgroundColor: 'rgba(200,120,30,0.6)',
-                            borderColor: 'hsl(25, 75%, 47%)',
+                            backgroundColor: 'rgba(21,128,61,0.6)',
+                            borderColor: '#166534',
                             borderWidth: 2,
                             borderRadius: 4
                         }
@@ -1262,7 +1870,7 @@ $page_title = 'Statistiques - Administration PharmaGeo';
                     labels: ['Disponible', 'Stock faible', 'Rupture'],
                     datasets: [{
                         data: [disponibles, stockFaible, rupture],
-                        backgroundColor: ['rgb(42, 195, 42)', 'hsl(25, 75%, 47%)', '#e74c3c'],
+                        backgroundColor: ['#16A34A', '#166534', '#DC2626'],
                         borderWidth: 3,
                         borderColor: '#ffffff'
                     }]
@@ -1294,16 +1902,16 @@ $page_title = 'Statistiques - Administration PharmaGeo';
                         {
                             label: 'Total',
                             data: resData.map(item => parseInt(item.total || 0)),
-                            borderColor: '#3498db',
-                            backgroundColor: 'rgba(52,152,219,0.1)',
+                            borderColor: '#166534',
+                            backgroundColor: 'rgba(22,83,52,0.1)',
                             fill: true,
                             tension: 0.4
                         },
                         {
                             label: 'Confirmées',
                             data: resData.map(item => parseInt(item.confirmees || 0)),
-                            borderColor: 'rgb(42, 195, 42)',
-                            backgroundColor: 'rgba(42,195,42,0.1)',
+                            borderColor: '#16A34A',
+                            backgroundColor: 'rgba(22,163,74,0.1)',
                             fill: true,
                             tension: 0.4
                         }
@@ -1354,8 +1962,8 @@ $page_title = 'Statistiques - Administration PharmaGeo';
                             statusData.expirees || 0
                         ],
                         backgroundColor: [
-                            '#f39c12', '#2ecc71', '#e74c3c', 
-                            '#3498db', '#7f8c8d', '#9b59b6'
+                            '#DC2626', '#16A34A', '#DC2626', 
+                            '#166534', '#64748B', '#1F2937'
                         ],
                         borderWidth: 3,
                         borderColor: '#ffffff'
@@ -1387,8 +1995,8 @@ $page_title = 'Statistiques - Administration PharmaGeo';
                     datasets: [{
                         label: 'Pharmacies',
                         data: communesData.map(item => parseInt(item.total || 0)),
-                        backgroundColor: 'rgba(42,195,42,0.6)',
-                        borderColor: 'rgb(42, 195, 42)',
+                        backgroundColor: 'rgba(22,163,74,0.6)',
+                        borderColor: '#16A34A',
                         borderWidth: 2,
                         borderRadius: 4
                     }]
@@ -1432,8 +2040,8 @@ $page_title = 'Statistiques - Administration PharmaGeo';
                     datasets: [{
                         label: 'Réservations',
                         data: sortedData,
-                        backgroundColor: 'rgba(52,152,219,0.6)',
-                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(22,83,52,0.6)',
+                        borderColor: '#166534',
                         borderWidth: 2,
                         borderRadius: 4
                     }]
@@ -1467,7 +2075,7 @@ $page_title = 'Statistiques - Administration PharmaGeo';
             });
 
             // ===== CONSOLE LOG =====
-            console.log('%c PharmaGeo - Statistiques ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c PharmaGeo - Statistiques ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
 
         });
     </script>

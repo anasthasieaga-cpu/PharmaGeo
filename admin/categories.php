@@ -11,6 +11,12 @@ ini_set('display_errors', 1);
 // ===== DÉFINITION DES CONSTANTES =====
 define('BASE_URL', 'http://localhost/pharmageo/');
 
+// ===== GESTION DES IMAGES (photos de profil) =====
+require_once __DIR__ . '/../includes/images.php';
+
+// ===== PAGINATION (10 éléments par page) =====
+require_once __DIR__ . '/../includes/pagination.php';
+
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
     $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
@@ -177,13 +183,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'supprimer' && isset($_GET['id
 
 // ===== RÉCUPÉRATION DES DONNÉES =====
 try {
-    // Récupérer toutes les catégories avec leurs statistiques
+    // Récupérer les catégories de la page courante (pagination serveur)
+    $total_categories = (int) $pdo->query("SELECT COUNT(*) FROM categorie")->fetchColumn();
+    $pagination = pagination_calculer($total_categories);
     $categories = $pdo->query("
         SELECT c.*,
                (SELECT COUNT(*) FROM medicament WHERE Id_categorie = c.Id_categorie) as total_medicaments
         FROM categorie c
         ORDER BY c.Libelle ASC
-    ")->fetchAll();
+    " . pagination_sql_limite($pagination))->fetchAll();
     
     // Statistiques
     $stats = [
@@ -232,18 +240,18 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --light-bg: #f0f2f5;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --light-bg: #F0FDF4;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-sm: 0 2px 20px rgba(0,0,0,0.04);
             --shadow-md: 0 8px 40px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
             --shadow-xl: 0 30px 80px rgba(0,0,0,0.16);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
-            --shadow-glow-orange: 0 8px 40px rgba(200, 120, 30, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
+            --shadow-glow-orange: 0 8px 40px rgba(21,128,61, 0.20);
             --radius: 16px;
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -292,6 +300,8 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
             left: 0;
             width: 260px;
             height: 100vh;
+            display: flex;
+            flex-direction: column;
             background: var(--dark-text);
             color: white;
             padding: 20px 0;
@@ -304,22 +314,28 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
         .sidebar::-webkit-scrollbar { width: 4px; }
         .sidebar::-webkit-scrollbar-thumb { background: var(--primary-green); border-radius: 4px; }
 
-        .sidebar .brand {
-            text-align: center;
-            padding: 20px 15px 30px;
+.sidebar .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 16px;
             border-bottom: 1px solid rgba(255,255,255,0.05);
         }
 
-        .sidebar .brand .brand-icon {
+.sidebar .brand .brand-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
-            padding: 12px 15px;
-            border-radius: 14px;
-            font-size: 2rem;
-            display: inline-block;
-            margin-bottom: 10px;
-        }
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+         color: #fff;}
 
-        .sidebar .brand h4 {
+.sidebar .brand h4 {
+            font-size: 1.1rem;
             font-weight: 800;
             margin: 0;
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
@@ -334,7 +350,7 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
             display: block;
         }
 
-        .sidebar .nav-menu { padding: 20px 15px; }
+        .sidebar .nav-menu { padding: 20px 15px; flex: 1; }
 
         .sidebar .nav-menu .nav-label {
             font-size: 0.7rem;
@@ -369,7 +385,7 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
         }
 
         .sidebar .nav-menu .nav-item.active {
-            background: linear-gradient(135deg, rgba(42,195,42,0.2), rgba(200,120,30,0.2));
+            background: linear-gradient(135deg, rgba(22,163,74,0.2), rgba(21,128,61,0.2));
             color: var(--primary-green);
             border-left: 3px solid var(--primary-green);
         }
@@ -377,10 +393,6 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
         .sidebar .nav-menu .nav-item i { width: 20px; text-align: center; font-size: 1rem; }
 
         .sidebar .user-profile {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
             padding: 20px;
             border-top: 1px solid rgba(255,255,255,0.05);
             display: flex;
@@ -404,6 +416,10 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
         .sidebar .user-profile .user-info { flex: 1; }
         .sidebar .user-profile .user-info .name { font-weight: 600; font-size: 0.9rem; color: white; }
         .sidebar .user-profile .user-info .role { font-size: 0.7rem; color: rgba(255,255,255,0.4); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
 
         /* ===== MAIN CONTENT ===== */
         .main-content {
@@ -469,7 +485,7 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
 
         .top-bar .page-actions .btn-action.btn-primary-custom:hover {
             transform: translateY(-2px);
-            box-shadow: 0 12px 40px rgba(42,195,42,0.3);
+            box-shadow: 0 12px 40px rgba(22,163,74,0.3);
         }
 
         .top-bar .page-actions .btn-action.btn-outline-custom {
@@ -579,23 +595,23 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
         }
 
         .stat-card .stat-icon.green {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .stat-card .stat-icon.orange {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
         .stat-card .stat-icon.blue {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         .stat-card .stat-icon.purple {
             background: rgba(155,89,182,0.1);
-            color: #9b59b6;
+            color: #1F2937;
         }
 
         .stat-card .stat-number {
@@ -630,14 +646,14 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--gray-text);
-            border-bottom: 2px solid #f0f0f0;
+            border-bottom: 2px solid #F0FDF4;
             padding: 12px 10px;
         }
 
         .table-custom tbody td {
             padding: 14px 10px;
             vertical-align: middle;
-            border-bottom: 1px solid #f5f5f5;
+            border-bottom: 1px solid #F0FDF4;
             font-size: 0.9rem;
         }
 
@@ -646,7 +662,7 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
         }
 
         .table-custom tbody tr:hover {
-            background: rgba(42,195,42,0.02);
+            background: rgba(22,163,74,0.02);
         }
 
         .table-custom tbody tr:last-child td {
@@ -662,23 +678,23 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
         }
 
         .badge-status.success {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .badge-status.warning {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
         .badge-status.info {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         .badge-status.secondary {
             background: rgba(108,117,125,0.1);
-            color: #6c757d;
+            color: #64748B;
         }
 
         /* ===== BTN ACTION ===== */
@@ -696,7 +712,7 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
         }
 
         .btn-action-sm.btn-edit {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
@@ -706,22 +722,22 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
         }
 
         .btn-action-sm.btn-delete {
-            background: rgba(231,76,60,0.1);
-            color: #e74c3c;
+            background: rgba(220,38,38,0.1);
+            color: #DC2626;
         }
 
         .btn-action-sm.btn-delete:hover {
-            background: #e74c3c;
+            background: #DC2626;
             color: white;
         }
 
         .btn-action-sm.btn-view {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         .btn-action-sm.btn-view:hover {
-            background: #3498db;
+            background: #166534;
             color: white;
         }
 
@@ -740,19 +756,19 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
         .alert-custom i { font-size: 1.2rem; margin-top: 2px; }
 
         .alert-custom-success {
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
             color: var(--primary-green);
             border-left: 4px solid var(--primary-green);
         }
 
         .alert-custom-danger {
-            background: rgba(231,76,60,0.08);
-            color: #e74c3c;
-            border-left: 4px solid #e74c3c;
+            background: rgba(220,38,38,0.08);
+            color: #DC2626;
+            border-left: 4px solid #DC2626;
         }
 
         .alert-custom-warning {
-            background: rgba(200,120,30,0.08);
+            background: rgba(21,128,61,0.08);
             color: var(--primary-orange);
             border-left: 4px solid var(--primary-orange);
         }
@@ -838,9 +854,9 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
             .stat-card .stat-number { font-size: 1.3rem; }
             .stat-card .stat-label { font-size: 0.7rem; }
             .stat-card .stat-icon { width: 32px; height: 32px; font-size: 0.9rem; }
-        }
-    </style>
-    <link rel="stylesheet" href="../assets/css/responsive.css">
+        }    </style>
+    <link rel="stylesheet" href="../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -849,11 +865,10 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
 
     <!-- ===== SIDEBAR ===== -->
     <aside class="sidebar" id="sidebar">
-        <div class="brand">
+        <a href="<?php echo BASE_URL; ?>index.php" class="brand" style="text-decoration: none;">
             <div class="brand-icon"><i class="fas fa-hospital"></i></div>
-            <h4>PharmaGeo</h4>
-            <small>Administration</small>
-        </div>
+            <div><h4>PharmaGeo</h4><small>Administration</small></div>
+        </a>
 
         <nav class="nav-menu">
             <div class="nav-label">Navigation</div>
@@ -899,21 +914,28 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
                 <i class="fas fa-user-edit"></i>
                 <span>Mon profil</span>
             </a>
-            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);">
-                <i class="fas fa-sign-out-alt"></i>
-                <span>Déconnexion</span>
-            </a>
+
         </nav>
 
-        <div class="user-profile">
+        <a class="user-profile" href="<?php echo BASE_URL; ?>admin/profil.php" title="Voir mon profil">
             <div class="avatar">
-                <?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?>
+                <?php if (!empty($_SESSION['photo']) && pharma_image_disponible($_SESSION['photo'])): ?>
+                    <img src="<?php echo htmlspecialchars(pharma_image_url($_SESSION['photo'])); ?>" alt="">
+                <?php else: ?>
+                    <?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?>
+                <?php endif; ?>
             </div>
             <div class="user-info">
                 <div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div>
-                <div class="role"><i class="fas fa-crown me-1" style="color: #f1c40f;"></i> Administrateur</div>
-            </div>
-        </div>
+                <div class="role"><i class="fas fa-crown me-1" style="color: #DC2626;"></i> Administrateur</div>
+            <i class="fas fa-chevron-right profile-chevron"></i>
+        </a>
+    
+    <?php require_once __DIR__ . '/../includes/reinitialiser.php'; echo html_bloc_reinitialiser(); ?>
+    <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.15); margin-top: auto; text-decoration: none;">
+        <i class="fas fa-sign-out-alt"></i>
+        <span>Déconnexion</span>
+    </a>
     </aside>
 
     <!-- ===== MAIN CONTENT ===== -->
@@ -998,7 +1020,7 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
                                     <td><?php echo $index + 1; ?></td>
                                     <td>
                                         <div class="d-flex align-items-center gap-2">
-                                            <span class="badge" style="background: <?php echo $cat['Couleur'] ?? '#6c757d'; ?>; width: 12px; height: 12px; border-radius: 50%;"></span>
+                                            <span class="badge" style="background: <?php echo $cat['Couleur'] ?? '#64748B'; ?>; width: 12px; height: 12px; border-radius: 50%;"></span>
                                             <strong><?php echo htmlspecialchars($cat['Libelle']); ?></strong>
                                         </div>
                                     </td>
@@ -1026,12 +1048,15 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
                         </tbody>
                     </table>
                 </div>
+
+                <!-- ===== PAGINATION ===== -->
+                <?php pagination_afficher($pagination, [], 'catégories'); ?>
             <?php else: ?>
                 <div class="empty-state">
                     <i class="fas fa-tags"></i>
                     <h5>Aucune catégorie trouvée</h5>
                     <p>Commencez par ajouter des catégories pour organiser vos médicaments.</p>
-                    <button class="btn btn-primary-custom mt-3" data-bs-toggle="modal" data-bs-target="#addModal" style="padding: 10px 28px; border-radius: 50px; background: linear-gradient(135deg, rgb(42,195,42), hsl(25,75%,47%)); color: white; border: none; font-weight: 600; transition: var(--transition);">
+                    <button class="btn btn-primary-custom mt-3" data-bs-toggle="modal" data-bs-target="#addModal" style="padding: 10px 28px; border-radius: 50px; background: linear-gradient(135deg, #16A34A, #166534); color: white; border: none; font-weight: 600; transition: var(--transition);">
                         <i class="fas fa-plus me-1"></i> Ajouter une catégorie
                     </button>
                 </div>
@@ -1161,7 +1186,7 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
                         title: '⚠️ Suppression impossible',
                         text: message,
                         icon: 'warning',
-                        confirmButtonColor: '#6c757d',
+                        confirmButtonColor: '#64748B',
                         confirmButtonText: 'OK'
                     });
                     return false;
@@ -1172,8 +1197,8 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
                     text: message + ' Cette action est irréversible.',
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonColor: '#e74c3c',
-                    cancelButtonColor: '#6c757d',
+                    confirmButtonColor: '#DC2626',
+                    cancelButtonColor: '#64748B',
                     confirmButtonText: 'Oui, supprimer',
                     cancelButtonText: 'Annuler'
                 }).then((result) => {
@@ -1198,7 +1223,7 @@ $page_title = 'Gestion des catégories - Administration PharmaGeo';
             });
 
             // ===== CONSOLE LOG =====
-            console.log('%c PharmaGeo - Gestion des catégories ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c PharmaGeo - Gestion des catégories ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
             console.log('%c Raccourci : Ctrl+N pour ajouter une catégorie', 'color: #666; font-size: 13px;');
 
         });

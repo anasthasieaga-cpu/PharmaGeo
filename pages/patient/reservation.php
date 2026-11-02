@@ -1,40 +1,26 @@
 <?php
 // ============================================================
-// PharmaGeo — Espace patient : Réservation
-// Permet au patient de réserver un médicament dans une pharmacie.
+// PharmaGeo — Réservation
+// Permet de réserver un médicament dans une pharmacie.
+// Un visiteur sans compte peut réserver : ses informations
+// (nom, prénom, email, mot de passe) créent son compte patient
+// automatiquement, puis la réservation est enregistrée.
+// La logique de réservation est partagée avec reservation_groupe.php
+// (voir includes/reservation_fonctions.php).
 // ============================================================
 
-// ===== ACTIVATION DES ERREURS =====
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+require_once '../../includes/config.php';
+require_once '../../includes/session.php';
+require_once '../../includes/reservation_fonctions.php';
 
-// ===== DÉFINITION DES CONSTANTES =====
-define('BASE_URL', 'http://localhost/pharmageo/');
-
-// ===== CONNEXION À LA BASE DE DONNÉES =====
-try {
-    $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-} catch(PDOException $e) {
-    die("Erreur de connexion à la base de données : " . $e->getMessage());
+// ===== UTILISATEUR CONNECTÉ ? =====
+$est_connecte = isset($_SESSION['user_id']);
+$user = null;
+if ($est_connecte) {
+    $stmt = $pdo->prepare("SELECT * FROM utilisateur WHERE Id_utilisateur = ?");
+    $stmt->execute([(int)$_SESSION['user_id']]);
+    $user = $stmt->fetch();
 }
-
-// ===== GESTION DES SESSIONS =====
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-// ===== VÉRIFICATION CONNEXION =====
-if (!isset($_SESSION['user_id'])) {
-    header('Location: ' . BASE_URL . 'connexion.php');
-    exit();
-}
-
-// ===== RÉCUPÉRATION UTILISATEUR =====
-$stmt = $pdo->prepare("SELECT * FROM utilisateur WHERE Id_utilisateur = :id");
-$stmt->execute([':id' => $_SESSION['user_id']]);
-$user = $stmt->fetch();
 
 // Identifier le stock demandé
 $id_stock = isset($_GET['id_stock']) ? (int)$_GET['id_stock'] : 0;
@@ -44,6 +30,16 @@ $id_pharmacie = isset($_GET['pharmacie']) ? (int)$_GET['pharmacie'] : 0;
 $stock_info = null;
 $error = '';
 $success_message = '';
+$compte_creer = false;
+$id_reservation = 0;
+
+// Informations invité (pour pré-remplir le formulaire)
+$guest = [
+    'nom'       => isset($_POST['nom']) ? trim($_POST['nom']) : '',
+    'prenom'    => isset($_POST['prenom']) ? trim($_POST['prenom']) : '',
+    'email'     => isset($_POST['email']) ? trim($_POST['email']) : '',
+    'telephone' => isset($_POST['telephone']) ? trim($_POST['telephone']) : '',
+];
 
 // Résoudre le stock à partir du médicament + pharmacie si nécessaire
 if ($id_stock <= 0 && $id_medicament > 0 && $id_pharmacie > 0) {
@@ -58,7 +54,7 @@ if ($id_stock > 0) {
     $stmt = $pdo->prepare("
         SELECT
             s.Id_stock, s.Quantite, s.Prix, s.Statut as Statut_stock, s.Seuil_alerte,
-            m.Id_medicament, m.Nom_commercial, m.DCI, m.Forme, m.Dosage, m.Description,
+            m.Id_medicament, m.Nom_commercial, m.DCI, m.Forme, m.Dosage, m.Description, m.Statut as Medicament_Statut,
             p.Id_pharmacie, p.Nom as Pharmacie, p.Adresse, p.Quartier, p.Commune,
             p.Telephone as Pharmacie_Tel, p.Horaire, p.Latitude, p.Longitude,
             p.Statut as Pharmacie_Statut
@@ -77,86 +73,45 @@ if ($id_stock > 0) {
 
 // Traitement de la réservation
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id_stock > 0 && $stock_info) {
-    $quantite = isset($_POST['quantite']) ? (int)$_POST['quantite'] : 1;
-    $quantite = max(1, $quantite);
+    $quantite = isset($_POST['quantite']) ? max(1, (int)$_POST['quantite']) : 1;
 
-    if ($stock_info['Pharmacie_Statut'] !== 'active') {
-        $error = "La pharmacie n'est pas active pour le moment.";
-    } elseif ($quantite > $stock_info['Quantite'] || $stock_info['Quantite'] <= 0 || in_array($stock_info['Statut_stock'], ['rupture', 'desactive'])) {
-        $error = "Stock insuffisant. Quantité disponible : " . $stock_info['Quantite'];
+    // ==== DÉTERMINER L'UTILISATEUR (connecté ou invité) ====
+    $identity = reservationResoudreUtilisateur(
+        $pdo,
+        $guest,
+        isset($_POST['password']) ? (string)$_POST['password'] : '',
+        isset($_POST['confirm_password']) ? (string)$_POST['confirm_password'] : ''
+    );
+
+    if (!empty($identity['erreurs'])) {
+        $error = implode('<br>', $identity['erreurs']);
     } else {
-        try {
-            // Vérifier qu'il n'existe pas déjà une réservation en attente pour ce stock/utilisateur
-            $check = $pdo->prepare("
-                SELECT COUNT(*) as total FROM reservation
-                WHERE Id_utilisateur = :user AND Id_stock = :stock AND Statut = 'en_attente'
-            ");
-            $check->execute([':user' => $_SESSION['user_id'], ':stock' => $id_stock]);
-            $deja_reserve = $check->fetch()['total'] > 0;
+        $compte_creer = $identity['compte_creer'];
+        if ($identity['session_ouverte']) $est_connecte = true;
 
-            if ($deja_reserve) {
-                $error = "Vous avez déjà une réservation en attente pour ce médicament dans cette pharmacie.";
-            } else {
-                $pdo->beginTransaction();
+        // ==== CRÉER LA RÉSERVATION ====
+        $reservation = reservationCreer($pdo, $identity['user_id'], $stock_info, $quantite);
 
-                $stmt = $pdo->prepare("
-                    INSERT INTO reservation (Id_utilisateur, Id_stock, Quantite, Statut, Date_reservation)
-                    VALUES (:user, :stock, :quantite, 'en_attente', NOW())
-                ");
-                $stmt->execute([
-                    ':user' => $_SESSION['user_id'],
-                    ':stock' => $id_stock,
-                    ':quantite' => $quantite
-                ]);
+        if (!$reservation['ok']) {
+            $error = $reservation['erreur'];
+        } else {
+            $montant = $reservation['montant'];
 
-                // Créer une notification pour le pharmacien
-                try {
-                    $stmtPharm = $pdo->prepare("
-                        SELECT ph.Id_utilisateur as Id_pharmacien
-                        FROM pharmacie p
-                        JOIN pharmacien ph ON p.Id_pharmacien = ph.Id_pharmacien
-                        WHERE p.Id_pharmacie = :id
-                    ");
-                    $stmtPharm->execute([':id' => $stock_info['Id_pharmacie']]);
-                    $pharmacien = $stmtPharm->fetch();
-
-                    if ($pharmacien) {
-                        $stmtNotif = $pdo->prepare("
-                            INSERT INTO notification (Titre, Message, Id_utilisateur, Lu)
-                            VALUES ('Nouvelle réservation', :message, :user, 0)
-                        ");
-                        $stmtNotif->execute([
-                            ':user' => $pharmacien['Id_pharmacien'],
-                            ':message' => 'Nouvelle réservation : ' . $stock_info['Nom_commercial'] . ' (x' . $quantite . ')'
-                        ]);
-                    }
-                } catch(PDOException $e) {
-                    // Ne pas bloquer si la notification échoue
-                }
-
-                // Journalisation
-                try {
-                    $log = $pdo->prepare("INSERT INTO log (Action, Adresse_ip, Navigateur, Resultat, Id_utilisateur)
-                                          VALUES ('Réservation créée', :ip, :ua, 'succes', :user)");
-                    $log->execute([
-                        ':ip' => $_SERVER['REMOTE_ADDR'] ?? '',
-                        ':ua' => $_SERVER['HTTP_USER_AGENT'] ?? '',
-                        ':user' => $_SESSION['user_id']
-                    ]);
-                } catch(PDOException $e) {
-                    // Ignorer
-                }
-
-                $pdo->commit();
-
-                $success_message = "Votre réservation a bien été enregistrée. La pharmacie va la traiter.";
-                $stock_info['Quantite'] -= $quantite;
+            $success_message = '';
+            if ($compte_creer) {
+                $success_message .= "Votre compte patient a été créé avec succès. ";
             }
-        } catch(PDOException $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
+            $success_message .= "Votre réservation a bien été enregistrée. ";
+            if ($montant !== null) {
+                $success_message .= "Montant à payer : "
+                    . number_format($montant, 0, ',', ' ')
+                    . " FCFA pour " . $quantite . " unité(s) à "
+                    . number_format($stock_info['Prix'], 0, ',', ' ')
+                    . " FCFA l'unité. ";
             }
-            $error = "Erreur lors de l'enregistrement de la réservation.";
+            $success_message .= "La pharmacie va la traiter.";
+            $stock_info['Quantite'] -= $quantite;
+            $id_reservation = isset($reservation['id']) ? (int)$reservation['id'] : 0;
         }
     }
 }
@@ -175,14 +130,14 @@ $page_title = 'Réservation - PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: #2ac32a;
-            --primary-orange: #d4880f;
-            --dark-text: #0a1628;
+            --primary-green: #16A34A;
+            --primary-orange: #B91C1C;
+            --dark-text: #0F2E19;
             --gray-text: #64748b;
         }
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #f4f7f6;
+            background: #F0FDF4;
         }
         .reservation-wrap { max-width: 1100px; margin: 0 auto; padding: 24px 0; }
         .reservation-card {
@@ -203,30 +158,42 @@ $page_title = 'Réservation - PharmaGeo';
         .info-line { color: var(--gray-text); font-size: 0.95rem; }
         .qty-box {
             display: flex; align-items: center; gap: 12px;
-            background: #f8faf9; border-radius: 12px; padding: 14px 18px;
+            background: #F0FDF4; border-radius: 12px; padding: 14px 18px;
         }
         .qty-input {
             width: 90px; text-align: center; font-weight: 700;
-            border: 2px solid #e6ebe9; border-radius: 8px; padding: 8px;
+            border: 2px solid #D9E9DF; border-radius: 8px; padding: 8px;
         }
         .btn-submit {
-            background: linear-gradient(135deg, var(--primary-green), #1e8e1e);
+            background: linear-gradient(135deg, var(--primary-green), #166534);
             border: none; color: #fff; font-weight: 700;
             border-radius: 12px; padding: 13px 30px;
         }
-        .btn-submit:hover { transform: translateY(-2px); box-shadow: 0 10px 34px rgba(42,195,42,0.28); }
+        .btn-submit:hover { transform: translateY(-2px); box-shadow: 0 10px 34px rgba(22,163,74,0.28); }
         .price-badge {
-            background: rgba(42,195,42,0.1); color: var(--primary-green);
+            background: rgba(22,163,74,0.1); color: var(--primary-green);
             font-weight: 700; padding: 6px 14px; border-radius: 50px;
         }
-        .text-danger { color: #dc3545 !important; }
+        .text-danger { color: #DC2626 !important; }
+        .guest-account {
+            background: #F0FDF4;
+            border: 1px solid #D9E9DF;
+            border-radius: 14px;
+            padding: 18px;
+        }
+        .guest-account .form-label { font-weight: 600; }
+        .guest-account .form-control:focus {
+            border-color: var(--primary-green);
+            box-shadow: 0 0 0 0.2rem rgba(22,163,74,0.12);
+        }
         /* ===== RESPONSIVE ===== */
         @media (max-width: 576px) {
             .reservation-body { padding: 20px; }
             .reservation-header { padding: 20px; }
         }
     </style>
-    <link rel="stylesheet" href="../../assets/css/responsive.css">
+    <link rel="stylesheet" href="../../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
     <!-- ===== NAVIGATION ===== -->
@@ -240,10 +207,14 @@ $page_title = 'Réservation - PharmaGeo';
             </button>
             <div class="collapse navbar-collapse" id="navRes">
                 <ul class="navbar-nav ms-auto">
-                    <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>pages/patient/dashboard.php"><i class="fas fa-tachometer-alt me-1"></i>Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>pages/patient/recherche.php"><i class="fas fa-search me-1"></i>Rechercher</a></li>
-                    <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>pages/patient/historique.php"><i class="fas fa-history me-1"></i>Historique</a></li>
-                    <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>deconnexion.php"><i class="fas fa-sign-out-alt me-1"></i>Déconnexion</a></li>
+                    <?php if ($est_connecte): ?>
+                        <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>pages/patient/dashboard.php"><i class="fas fa-tachometer-alt me-1"></i>Dashboard</a></li>
+                        <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>pages/patient/recherche.php"><i class="fas fa-search me-1"></i>Rechercher</a></li>
+                        <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>pages/patient/historique.php"><i class="fas fa-history me-1"></i>Historique</a></li>
+                        <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>deconnexion.php"><i class="fas fa-sign-out-alt me-1"></i>Déconnexion</a></li>
+                    <?php else: ?>
+                        <li class="nav-item"><a class="nav-link" href="<?php echo BASE_URL; ?>connexion.php"><i class="fas fa-sign-in-alt me-1"></i>Se connecter</a></li>
+                    <?php endif; ?>
                 </ul>
             </div>
         </div>
@@ -261,8 +232,15 @@ $page_title = 'Réservation - PharmaGeo';
                         <i class="fas fa-check-circle me-2"></i><?php echo htmlspecialchars($success_message); ?>
                     </div>
                     <div class="text-center mt-4">
-                        <a href="<?php echo BASE_URL; ?>pages/patient/historique.php" class="btn btn-success btn-submit">
-                            <i class="fas fa-history me-2"></i>Voir mes réservations
+                        <?php
+                        // Le patient va directement sur SA réservation,
+                        // pas dans l'historique général.
+                        $urlMaReservation = $id_reservation > 0
+                            ? BASE_URL . 'pages/patient/ma_reservation.php?id=' . $id_reservation
+                            : BASE_URL . 'pages/patient/ma_reservation.php';
+                        ?>
+                        <a href="<?php echo htmlspecialchars($urlMaReservation); ?>" class="btn btn-success btn-submit">
+                            <i class="fas fa-ticket me-2"></i>Voir ma réservation
                         </a>
                         <a href="<?php echo BASE_URL; ?>pages/patient/recherche.php" class="btn btn-outline-dark ms-2">
                             <i class="fas fa-search me-2"></i>Nouvelle recherche
@@ -271,7 +249,7 @@ $page_title = 'Réservation - PharmaGeo';
 
                 <?php elseif ($error): ?>
                     <div class="alert alert-danger">
-                        <i class="fas fa-exclamation-circle me-2"></i><?php echo htmlspecialchars($error); ?>
+                        <i class="fas fa-exclamation-circle me-2"></i><?php echo $error; ?>
                     </div>
                     <div class="text-center mt-4">
                         <a href="<?php echo BASE_URL; ?>pages/patient/recherche.php" class="btn btn-primary btn-submit">
@@ -327,7 +305,7 @@ $page_title = 'Réservation - PharmaGeo';
                                 </div>
 
                                 <div class="d-flex justify-content-between align-items-center mb-4">
-                                    <span class="fw-bold">Prix</span>
+                                    <span class="fw-bold">Prix unitaire</span>
                                     <span class="price-badge">
                                         <?php echo $stock_info['Prix'] ? number_format($stock_info['Prix'], 0, ',', ' ') . ' FCFA' : 'Prix non communiqué'; ?>
                                     </span>
@@ -335,11 +313,66 @@ $page_title = 'Réservation - PharmaGeo';
 
                                 <?php if ($stock_info['Quantite'] > 0 && $stock_info['Pharmacie_Statut'] === 'active'): ?>
                                     <form method="POST" action="">
+
+                                        <?php if (!$est_connecte): ?>
+                                            <!-- ===== CRÉATION DE COMPTE PATIENT (visiteur) ===== -->
+                                            <div class="guest-account mb-4">
+                                                <h6 class="fw-bold mb-1">
+                                                    <i class="fas fa-user-plus me-2" style="color: var(--primary-green);"></i>Créer votre compte patient
+                                                </h6>
+                                                <p class="text-muted small mb-3">
+                                                    Réservez sans compte : ces informations créeront votre compte patient automatiquement.
+                                                    Si vous avez déjà un compte, entrez simplement votre email et votre mot de passe.
+                                                </p>
+                                                <div class="row g-2 mb-2">
+                                                    <div class="col-6">
+                                                        <label class="form-label small mb-1">Nom <span class="text-danger">*</span></label>
+                                                        <input type="text" name="nom" class="form-control form-control-sm"
+                                                               value="<?php echo htmlspecialchars($guest['nom']); ?>" required placeholder="Nom">
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <label class="form-label small mb-1">Prénom <span class="text-danger">*</span></label>
+                                                        <input type="text" name="prenom" class="form-control form-control-sm"
+                                                               value="<?php echo htmlspecialchars($guest['prenom']); ?>" required placeholder="Prénom">
+                                                    </div>
+                                                </div>
+                                                <div class="mb-2">
+                                                    <label class="form-label small mb-1">Adresse email <span class="text-danger">*</span></label>
+                                                    <input type="email" name="email" class="form-control form-control-sm"
+                                                           value="<?php echo htmlspecialchars($guest['email']); ?>" required placeholder="vous@exemple.com">
+                                                </div>
+                                                <div class="mb-2">
+                                                    <label class="form-label small mb-1">Téléphone <span class="text-muted">(optionnel)</span></label>
+                                                    <input type="tel" name="telephone" class="form-control form-control-sm"
+                                                           value="<?php echo htmlspecialchars($guest['telephone']); ?>" placeholder="+229 00 00 00 00">
+                                                </div>
+                                                <div class="row g-2">
+                                                    <div class="col-6">
+                                                        <label class="form-label small mb-1">Mot de passe <span class="text-danger">*</span></label>
+                                                        <input type="password" name="password" class="form-control form-control-sm"
+                                                               required placeholder="8 caractères min.">
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <label class="form-label small mb-1">Confirmation <span class="text-danger">*</span></label>
+                                                        <input type="password" name="confirm_password" class="form-control form-control-sm"
+                                                               required placeholder="Confirmer">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        <?php endif; ?>
+
                                         <div class="qty-box mb-3">
                                             <i class="fas fa-box-open" style="color: var(--primary-green);"></i>
                                             <span class="fw-bold">Quantité :</span>
-                                            <input type="number" name="quantite" class="qty-input" value="1" min="1"
+                                            <input type="number" name="quantite" class="qty-input" id="qtyInput" value="1" min="1"
                                                    max="<?php echo (int)$stock_info['Quantite']; ?>" required>
+                                        </div>
+
+                                        <div class="d-flex justify-content-between align-items-center rounded-3 p-3 mb-3 bg-white border">
+                                            <span class="fw-bold"><i class="fas fa-money-bill-wave me-1" style="color: var(--primary-green);"></i>Total à payer</span>
+                                            <span class="fw-bold fs-5" id="montantTotal" style="color: var(--primary-green);">
+                                                <?php echo $stock_info['Prix'] ? number_format($stock_info['Prix'], 0, ',', ' ') . ' FCFA' : 'Prix non communiqué'; ?>
+                                            </span>
                                         </div>
                                         <button type="submit" class="btn btn-submit w-100">
                                             <i class="fas fa-calendar-check me-2"></i>Confirmer la réservation
@@ -375,5 +408,26 @@ $page_title = 'Réservation - PharmaGeo';
 
     <!-- ===== SCRIPTS ===== -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const qtyInput = document.getElementById('qtyInput');
+            const totalElem = document.getElementById('montantTotal');
+            const prixUnitaire = <?php echo !empty($stock_info['Prix']) ? (float)$stock_info['Prix'] : 0; ?>;
+
+            if (qtyInput && totalElem) {
+                function updateTotal() {
+                    const qty = Math.max(1, parseInt(qtyInput.value) || 1);
+                    if (prixUnitaire > 0) {
+                        const total = prixUnitaire * qty;
+                        totalElem.textContent = total.toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' FCFA';
+                    } else {
+                        totalElem.textContent = 'Prix non communiqué';
+                    }
+                }
+                qtyInput.addEventListener('input', updateTotal);
+                updateTotal();
+            }
+        });
+    </script>
 </body>
 </html>

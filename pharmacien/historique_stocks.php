@@ -12,6 +12,12 @@ ini_set('display_errors', 1);
 // ===== DÉFINITION DES CONSTANTES =====
 define('BASE_URL', 'http://localhost/pharmageo/');
 
+// ===== FONCTIONS UTILITAIRES =====
+require_once __DIR__ . '/../includes/fonctions.php';
+
+// ===== PAGINATION (10 éléments par page) =====
+require_once __DIR__ . '/../includes/pagination.php';
+
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
     $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
@@ -66,85 +72,77 @@ try {
 }
 
 // ===== PARAMÈTRES DE FILTRAGE ET PAGINATION =====
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$page = max(1, $page);
-$per_page = 20;
-$offset = ($page - 1) * $per_page;
-
 $filtre_type = $_GET['type'] ?? 'tous';
 $filtre_medicament = $_GET['medicament'] ?? '';
 $filtre_date_debut = $_GET['date_debut'] ?? '';
 $filtre_date_fin = $_GET['date_fin'] ?? '';
 $search = $_GET['search'] ?? '';
 
+$pagination = pagination_calculer(0);
+
 // ===== RÉCUPÉRATION DE L'HISTORIQUE =====
 try {
-    // Construction de la requête
-    $sql = "
-        SELECT hs.*, m.Nom_commercial, m.DCI, m.Dosage,
-               u.Nom, u.Prenom, u.Email
+    // Jointures et conditions communes à la liste et au compteur
+    $from = "
         FROM historique_stock hs
         JOIN stock s ON hs.Id_stock = s.Id_stock
         JOIN medicament m ON s.Id_medicament = m.Id_medicament
         JOIN utilisateur u ON hs.Id_utilisateur = u.Id_utilisateur
-        WHERE s.Id_pharmacie = :pharmacie
     ";
-    
-    $params = [':pharmacie' => $pharmacie_id];
-    
+
+    $params     = [':pharmacie' => $pharmacie_id];
+    $conditions = ["s.Id_pharmacie = :pharmacie"];
+
     // Filtre par type d'opération
     if ($filtre_type !== 'tous') {
-        $sql .= " AND hs.Type_operation = :type";
+        $conditions[] = "hs.Type_operation = :type";
         $params[':type'] = $filtre_type;
     }
-    
+
     // Filtre par médicament
     if (!empty($filtre_medicament)) {
-        $sql .= " AND m.Nom_commercial LIKE :medicament";
+        $conditions[] = "m.Nom_commercial LIKE :medicament";
         $params[':medicament'] = '%' . $filtre_medicament . '%';
     }
-    
+
     // Filtre par date
     if (!empty($filtre_date_debut)) {
-        $sql .= " AND DATE(hs.Date_operation) >= :date_debut";
+        $conditions[] = "DATE(hs.Date_operation) >= :date_debut";
         $params[':date_debut'] = $filtre_date_debut;
     }
     if (!empty($filtre_date_fin)) {
-        $sql .= " AND DATE(hs.Date_operation) <= :date_fin";
+        $conditions[] = "DATE(hs.Date_operation) <= :date_fin";
         $params[':date_fin'] = $filtre_date_fin;
     }
-    
+
     // Recherche
     if (!empty($search)) {
-        $sql .= " AND (m.Nom_commercial LIKE :search OR u.Nom LIKE :search OR u.Prenom LIKE :search)";
+        $conditions[] = "(m.Nom_commercial LIKE :search OR u.Nom LIKE :search OR u.Prenom LIKE :search)";
         $params[':search'] = '%' . $search . '%';
     }
-    
-    // Compter le total
-    $sql_count = str_replace(
-        "SELECT hs.*, m.Nom_commercial, m.DCI, m.Dosage, u.Nom, u.Prenom, u.Email",
-        "SELECT COUNT(*) as total",
-        $sql
-    );
-    
-    $stmt_count = $pdo->prepare($sql_count);
-    $stmt_count->execute($params);
-    $total_historique = $stmt_count->fetch()['total'] ?? 0;
-    
-    // Récupérer les données avec pagination
-    $sql .= " ORDER BY hs.Date_operation DESC LIMIT :offset, :per_page";
-    
-    $stmt = $pdo->prepare($sql);
-    foreach ($params as $key => $value) {
-        if ($key !== ':offset' && $key !== ':per_page') {
-            $stmt->bindValue($key, $value);
-        }
-    }
-    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-    $stmt->bindValue(':per_page', $per_page, PDO::PARAM_INT);
-    $stmt->execute();
-    $historique = $stmt->fetchAll();
 
+    $clauses = ' WHERE ' . implode(' AND ', $conditions);
+
+    // Compter le total correspondant aux filtres (pagination)
+    $stmt_count = $pdo->prepare("SELECT COUNT(*) as total $from$clauses");
+    $stmt_count->execute($params);
+    $total_historique = (int) $stmt_count->fetchColumn();
+
+    $pagination = pagination_calculer($total_historique);
+
+    // Seule la page courante est chargée.
+    // LIMIT/OFFSET injectés en dur : cette version de MariaDB refuse les
+    // placeholders préparés dans LIMIT (cf. includes/pagination.php).
+    $sql = "
+        SELECT hs.*, m.Nom_commercial, m.DCI, m.Dosage,
+               u.Nom, u.Prenom, u.Email
+        $from$clauses
+        ORDER BY hs.Date_operation DESC" . pagination_sql_limite($pagination);
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $historique = $stmt->fetchAll();
+    
     // Récupérer la liste des médicaments pour le filtre
     $medicaments_liste = $pdo->prepare("
         SELECT DISTINCT m.Nom_commercial, m.Id_medicament
@@ -196,13 +194,11 @@ try {
     $historique = [];
     $total_historique = 0;
     $medicaments_liste = [];
+    $pagination = pagination_calculer(0);
     $stats = ['total' => 0, 'ajouts' => 0, 'mises_a_jour' => 0, 'approvisionnements' => 0];
     $message = "Erreur lors du chargement des données : " . $e->getMessage();
     $message_type = "danger";
 }
-
-// ===== PAGINATION =====
-$total_pages = ceil($total_historique / $per_page);
 
 // ===== TYPES D'OPÉRATIONS =====
 $types_operation = [
@@ -231,17 +227,17 @@ $page_title = 'Historique des stocks - PharmaGeo';
     
     <style>
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --light-bg: #f0f2f5;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --light-bg: #F0FDF4;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-sm: 0 2px 20px rgba(0,0,0,0.04);
             --shadow-md: 0 8px 40px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
-            --shadow-glow-orange: 0 8px 40px rgba(200, 120, 30, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
+            --shadow-glow-orange: 0 8px 40px rgba(21,128,61, 0.20);
             --radius: 16px;
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -325,7 +321,7 @@ $page_title = 'Historique des stocks - PharmaGeo';
         .nav-link-custom:hover,
         .nav-link-custom.active {
             color: var(--primary-green);
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
         }
 
         .nav-link-custom::after {
@@ -347,32 +343,39 @@ $page_title = 'Historique des stocks - PharmaGeo';
         }
 
         .btn-nav-logout {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            background: linear-gradient(135deg, #DC2626, #B91C1C);
             color: white !important;
             padding: 8px 24px !important;
             border-radius: 50px !important;
             font-weight: 600;
             transition: var(--transition);
             border: none;
-            box-shadow: 0 4px 15px rgba(231,76,60,0.2);
+            box-shadow: 0 4px 15px rgba(220,38,38,0.2);
         }
 
         .btn-nav-logout:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(231,76,60,0.35);
+            box-shadow: 0 8px 30px rgba(220,38,38,0.35);
             color: white !important;
         }
 
         /* ===== LAYOUT / SIDEBAR ===== */
         .layout { display: flex; min-height: 100vh; }
         .sidebar-admin {
-            width: 250px; background: linear-gradient(180deg, #0c1f14, #143a1c);
+            width: 250px; background: linear-gradient(180deg, #0F2E19, #14532D);
             color: #fff; flex-shrink: 0; display: flex; flex-direction: column;
             position: fixed; top: 0; bottom: 0; left: 0; overflow-y: auto; z-index: 100;
         }
         .brand-admin { padding: 22px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; }
-        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; }
+        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center;  color: #fff;}
+        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; 
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: #fff;
+        }
+        
         .brand-admin small { color: rgba(255,255,255,0.6); display: block; }
         .nav-menu { padding: 16px 12px; flex: 1; }
         .nav-label { color: rgba(255,255,255,0.4); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; padding: 12px 12px 6px; }
@@ -384,6 +387,10 @@ $page_title = 'Historique des stocks - PharmaGeo';
         .user-profile .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; font-weight: 800; }
         .user-profile .name { font-size: 0.9rem; font-weight: 600; }
         .user-profile .role { font-size: 0.75rem; color: rgba(255,255,255,0.6); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
         @media (max-width: 991px) {
             .sidebar-admin { position: fixed; transform: translateX(-100%); transition: transform 0.3s ease; }
             .sidebar-admin.open { transform: translateX(0); }
@@ -455,7 +462,7 @@ $page_title = 'Historique des stocks - PharmaGeo';
 
         .top-bar .page-actions .btn-action.btn-primary-custom:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 40px rgba(42,195,42,0.35);
+            box-shadow: 0 12px 40px rgba(22,163,74,0.35);
         }
 
         .top-bar .page-actions .btn-action.btn-outline-custom {
@@ -524,23 +531,23 @@ $page_title = 'Historique des stocks - PharmaGeo';
         }
 
         .stat-card .stat-icon.green {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .stat-card .stat-icon.orange {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
         .stat-card .stat-icon.blue {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         .stat-card .stat-icon.purple {
             background: rgba(155,89,182,0.1);
-            color: #9b59b6;
+            color: #1F2937;
         }
 
         .stat-card .stat-number {
@@ -573,7 +580,7 @@ $page_title = 'Historique des stocks - PharmaGeo';
         .filters-bar .filter-btn {
             padding: 6px 16px;
             border-radius: 50px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid #D9E9DF;
             background: transparent;
             font-weight: 500;
             font-size: 0.8rem;
@@ -625,7 +632,7 @@ $page_title = 'Historique des stocks - PharmaGeo';
         .search-box:focus-within {
             border-color: var(--primary-green);
             background: var(--white);
-            box-shadow: 0 0 0 4px rgba(42,195,42,0.1);
+            box-shadow: 0 0 0 4px rgba(22,163,74,0.1);
         }
 
         .search-box .form-control {
@@ -671,14 +678,14 @@ $page_title = 'Historique des stocks - PharmaGeo';
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--gray-text);
-            border-bottom: 2px solid #f0f0f0;
+            border-bottom: 2px solid #F0FDF4;
             padding: 12px 10px;
         }
 
         .table-custom tbody td {
             padding: 14px 10px;
             vertical-align: middle;
-            border-bottom: 1px solid #f5f5f5;
+            border-bottom: 1px solid #F0FDF4;
             font-size: 0.9rem;
         }
 
@@ -687,7 +694,7 @@ $page_title = 'Historique des stocks - PharmaGeo';
         }
 
         .table-custom tbody tr:hover {
-            background: rgba(42,195,42,0.02);
+            background: rgba(22,163,74,0.02);
         }
 
         .table-custom tbody tr:last-child td {
@@ -706,18 +713,18 @@ $page_title = 'Historique des stocks - PharmaGeo';
         }
 
         .badge-type.ajout {
-            background: rgba(42,195,42,0.12);
+            background: rgba(22,163,74,0.12);
             color: var(--primary-green);
         }
 
         .badge-type.mise_a_jour {
-            background: rgba(200,120,30,0.12);
+            background: rgba(21,128,61,0.12);
             color: var(--primary-orange);
         }
 
         .badge-type.approvisionnement {
-            background: rgba(52,152,219,0.12);
-            color: #3498db;
+            background: rgba(22,83,52,0.12);
+            color: #166534;
         }
 
         /* ===== PAGINATION ===== */
@@ -732,7 +739,7 @@ $page_title = 'Historique des stocks - PharmaGeo';
         .pagination-custom .page-link-custom {
             padding: 8px 16px;
             border-radius: 10px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid #D9E9DF;
             background: transparent;
             color: var(--gray-text);
             font-weight: 500;
@@ -820,7 +827,7 @@ $page_title = 'Historique des stocks - PharmaGeo';
 
         .date-filters .form-control {
             padding: 6px 12px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid #D9E9DF;
             border-radius: 10px;
             font-size: 0.85rem;
             transition: var(--transition);
@@ -829,7 +836,7 @@ $page_title = 'Historique des stocks - PharmaGeo';
 
         .date-filters .form-control:focus {
             border-color: var(--primary-green);
-            box-shadow: 0 0 0 4px rgba(42,195,42,0.1);
+            box-shadow: 0 0 0 4px rgba(22,163,74,0.1);
             background: var(--white);
         }
 
@@ -840,7 +847,8 @@ $page_title = 'Historique des stocks - PharmaGeo';
             margin: 0;
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/responsive.css">
+    <link rel="stylesheet" href="../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -848,10 +856,10 @@ $page_title = 'Historique des stocks - PharmaGeo';
 
     <!-- ===== SIDEBAR ===== -->
     <aside class="sidebar-admin" id="sidebar">
-        <div class="brand-admin">
+        <a href="<?php echo BASE_URL; ?>index.php" class="brand-admin" style="text-decoration: none;">
             <div class="brand-icon"><i class="fas fa-hospital"></i></div>
-            <div><h4>PharmaGeo</h4><small>Pharmacien</small></div>
-        </div>
+            <div><h4>PharmaGeo</h4><small><?php echo htmlspecialchars(pharma_libelle_role('pharmacien', $user['Prenom'] ?? '')); ?></small></div>
+        </a>
         <nav class="nav-menu">
             <div class="nav-label">Navigation</div>
             <a href="<?php echo BASE_URL; ?>pharmacien/dashboard.php" class="nav-item"><i class="fas fa-tachometer-alt"></i><span>Tableau de bord</span></a>
@@ -863,15 +871,17 @@ $page_title = 'Historique des stocks - PharmaGeo';
             <a href="<?php echo BASE_URL; ?>pharmacien/statistiques.php" class="nav-item"><i class="fas fa-chart-bar"></i><span>Statistiques</span></a>
             <a href="<?php echo BASE_URL; ?>pharmacien/profil.php" class="nav-item"><i class="fas fa-user"></i><span>Profil</span></a>
             <div class="nav-label" style="margin-top: 20px;">Système</div>
-            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
+            <?php require_once __DIR__ . '/../includes/reinitialiser.php'; echo html_bloc_reinitialiser(); ?>
+            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.15); margin-bottom: 12px;"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
         </nav>
-        <div class="user-profile">
-            <div class="avatar"><?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?></div>
+        <a class="user-profile" href="<?php echo BASE_URL; ?>pharmacien/profil.php" title="Voir mon profil">
+            <div class="avatar"><?php if (!empty($_SESSION['photo']) && function_exists('pharma_image_disponible') && pharma_image_disponible($_SESSION['photo'])): ?><img src="<?php echo htmlspecialchars(pharma_image_url($_SESSION['photo'])); ?>" alt=""><?php else: ?><?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?><?php endif; ?></div>
             <div>
                 <div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div>
-                <div class="role"><i class="fas fa-user-md me-1" style="color:#f1c40f;"></i> Pharmacien</div>
+                <div class="role"><i class="fas fa-user-md me-1" style="color:#DC2626;"></i> <?php echo htmlspecialchars(pharma_libelle_role('pharmacien', $user['Prenom'] ?? '')); ?></div>
             </div>
-        </div>
+            <i class="fas fa-chevron-right profile-chevron"></i>
+        </a>
     </aside>
 
     <!-- ===== MAIN CONTENT ===== -->
@@ -952,12 +962,12 @@ $page_title = 'Historique des stocks - PharmaGeo';
             </a>
             <a href="<?php echo BASE_URL; ?>pharmacien/historique_stocks.php?type=approvisionnement&medicament=<?php echo urlencode($filtre_medicament); ?>&date_debut=<?php echo $filtre_date_debut; ?>&date_fin=<?php echo $filtre_date_fin; ?>&search=<?php echo urlencode($search); ?>" 
                class="filter-btn <?php echo $filtre_type === 'approvisionnement' ? 'active' : ''; ?>">
-                <i class="fas fa-truck" style="color: #3498db;"></i> Approvisionnements
+                <i class="fas fa-truck" style="color: #166534;"></i> Approvisionnements
                 <span class="count"><?php echo $stats['approvisionnements']; ?></span>
             </a>
 
             <!-- Filtre par médicament -->
-            <select class="form-control" style="border-radius: 50px; padding: 6px 16px; border: 2px solid #e0e0e0; font-size: 0.85rem; background: var(--light-bg);" 
+            <select class="form-control" style="border-radius: 50px; padding: 6px 16px; border: 2px solid #D9E9DF; font-size: 0.85rem; background: var(--light-bg);" 
                     onchange="window.location.href='<?php echo BASE_URL; ?>pharmacien/historique_stocks.php?type=<?php echo $filtre_type; ?>&date_debut=<?php echo $filtre_date_debut; ?>&date_fin=<?php echo $filtre_date_fin; ?>&search=<?php echo urlencode($search); ?>&medicament='+this.value">
                 <option value="">Tous les médicaments</option>
                 <?php foreach ($medicaments_liste as $med): ?>
@@ -989,7 +999,7 @@ $page_title = 'Historique des stocks - PharmaGeo';
                     <i class="fas fa-search"></i>
                 </button>
                 <?php if (!empty($search)): ?>
-                    <a href="<?php echo BASE_URL; ?>pharmacien/historique_stocks.php?type=<?php echo $filtre_type; ?>&medicament=<?php echo urlencode($filtre_medicament); ?>&date_debut=<?php echo $filtre_date_debut; ?>&date_fin=<?php echo $filtre_date_fin; ?>" class="btn-search" style="background: #e74c3c; padding: 6px 12px;">
+                    <a href="<?php echo BASE_URL; ?>pharmacien/historique_stocks.php?type=<?php echo $filtre_type; ?>&medicament=<?php echo urlencode($filtre_medicament); ?>&date_debut=<?php echo $filtre_date_debut; ?>&date_fin=<?php echo $filtre_date_fin; ?>" class="btn-search" style="background: #DC2626; padding: 6px 12px;">
                         <i class="fas fa-times"></i>
                     </a>
                 <?php endif; ?>
@@ -1061,38 +1071,13 @@ $page_title = 'Historique des stocks - PharmaGeo';
                 </div>
 
                 <!-- ===== PAGINATION ===== -->
-                <?php if ($total_pages > 1): ?>
-                    <div class="pagination-custom">
-                        <?php if ($page > 1): ?>
-                            <a href="<?php echo BASE_URL; ?>pharmacien/historique_stocks.php?page=<?php echo $page - 1; ?>&type=<?php echo $filtre_type; ?>&medicament=<?php echo urlencode($filtre_medicament); ?>&date_debut=<?php echo $filtre_date_debut; ?>&date_fin=<?php echo $filtre_date_fin; ?>&search=<?php echo urlencode($search); ?>" 
-                               class="page-link-custom">
-                                <i class="fas fa-chevron-left"></i> Précédent
-                            </a>
-                        <?php else: ?>
-                            <span class="page-link-custom disabled">
-                                <i class="fas fa-chevron-left"></i> Précédent
-                            </span>
-                        <?php endif; ?>
-
-                        <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                            <a href="<?php echo BASE_URL; ?>pharmacien/historique_stocks.php?page=<?php echo $i; ?>&type=<?php echo $filtre_type; ?>&medicament=<?php echo urlencode($filtre_medicament); ?>&date_debut=<?php echo $filtre_date_debut; ?>&date_fin=<?php echo $filtre_date_fin; ?>&search=<?php echo urlencode($search); ?>" 
-                               class="page-link-custom <?php echo $i === $page ? 'active' : ''; ?>">
-                                <?php echo $i; ?>
-                            </a>
-                        <?php endfor; ?>
-
-                        <?php if ($page < $total_pages): ?>
-                            <a href="<?php echo BASE_URL; ?>pharmacien/historique_stocks.php?page=<?php echo $page + 1; ?>&type=<?php echo $filtre_type; ?>&medicament=<?php echo urlencode($filtre_medicament); ?>&date_debut=<?php echo $filtre_date_debut; ?>&date_fin=<?php echo $filtre_date_fin; ?>&search=<?php echo urlencode($search); ?>" 
-                               class="page-link-custom">
-                                Suivant <i class="fas fa-chevron-right"></i>
-                            </a>
-                        <?php else: ?>
-                            <span class="page-link-custom disabled">
-                                Suivant <i class="fas fa-chevron-right"></i>
-                            </span>
-                        <?php endif; ?>
-                    </div>
-                <?php endif; ?>
+                <?php pagination_afficher($pagination, [
+                    'type'        => $filtre_type,
+                    'medicament'  => $filtre_medicament,
+                    'date_debut'  => $filtre_date_debut,
+                    'date_fin'    => $filtre_date_fin,
+                    'search'      => $search
+                ], 'mouvements'); ?>
 
             <?php else: ?>
                 <div class="empty-state">
@@ -1181,7 +1166,7 @@ $page_title = 'Historique des stocks - PharmaGeo';
             });
 
             // ===== CONSOLE LOG =====
-            console.log('%c PharmaGeo - Historique des stocks ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c PharmaGeo - Historique des stocks ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
 
         });
     </script>

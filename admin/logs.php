@@ -11,6 +11,12 @@ ini_set('display_errors', 1);
 // ===== DÉFINITION DES CONSTANTES =====
 define('BASE_URL', 'http://localhost/pharmageo/');
 
+// ===== GESTION DES IMAGES (photos de profil) =====
+require_once __DIR__ . '/../includes/images.php';
+
+// ===== PAGINATION (10 éléments par page) =====
+require_once __DIR__ . '/../includes/pagination.php';
+
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
     $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
@@ -39,9 +45,7 @@ $filtre_date_fin = isset($_GET['date_fin']) ? trim($_GET['date_fin']) : '';
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 
 // ===== PAGINATION =====
-$page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
-$per_page = 20;
-$offset = ($page - 1) * $per_page;
+$pagination = pagination_calculer(0);
 
 // ===== RÉCUPÉRATION DES LOGS =====
 $logs = [];
@@ -57,7 +61,12 @@ try {
             FROM log l
             LEFT JOIN utilisateur u ON l.Id_utilisateur = u.Id_utilisateur
             WHERE 1=1";
-    $count_sql = "SELECT COUNT(*) as total FROM log l WHERE 1=1";
+    // Le compteur doit reprendre la même jointure que la liste, sinon la
+    // recherche sur u.Nom / u.Prenom / u.Email échoue (colonne inconnue).
+    $count_sql = "SELECT COUNT(*) as total
+            FROM log l
+            LEFT JOIN utilisateur u ON l.Id_utilisateur = u.Id_utilisateur
+            WHERE 1=1";
     $params = [];
 
     if ($filtre_action !== '') {
@@ -86,21 +95,18 @@ try {
         $params[':search'] = '%' . $search . '%';
     }
 
-    $stmt = $pdo->prepare($count_sql);
+$stmt = $pdo->prepare($count_sql);
     $stmt->execute($params);
     $total_logs = $stmt->fetch()['total'] ?? 0;
 
-    $sql .= " ORDER BY l.Date_action DESC LIMIT :offset, :per_page";
-    $stmt = $pdo->prepare($sql);
-    foreach ($params as $k => $v) {
-        $stmt->bindValue($k, $v);
-    }
-    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-    $stmt->bindValue(':per_page', $per_page, PDO::PARAM_INT);
-    $stmt->execute();
-    $logs = $stmt->fetchAll();
+    $pagination = pagination_calculer($total_logs);
 
-    $total_pages = max(1, ceil($total_logs / $per_page));
+    // LIMIT/OFFSET injectés en dur : cette version de MariaDB refuse les
+    // placeholders préparés dans LIMIT (cf. includes/pagination.php).
+    $sql .= " ORDER BY l.Date_action DESC" . pagination_sql_limite($pagination);
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $logs = $stmt->fetchAll();
 } catch(PDOException $e) {
     $error = "Erreur lors du chargement des journaux.";
 }
@@ -125,20 +131,27 @@ $page_title = 'Journaux d\'activité - PharmaGeo';
     <link rel="stylesheet" href="../assets/css/style.css">
     <style>
         /* ===== VARIABLES ===== */
-        :root { --primary-green: #2ac32a; --primary-orange: #d4880f; --dark-text: #0a1628; --gray-text: #64748b; }
+        :root { --primary-green: #16A34A; --primary-orange: #B91C1C; --dark-text: #0F2E19; --gray-text: #64748b; }
         * { box-sizing: border-box; }
-        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #f0f3f2; margin: 0; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #F0FDF4; margin: 0; }
         .layout { display: flex; min-height: 100vh; }
 
         /* ===== SIDEBAR ===== */
         .sidebar-admin {
-            width: 250px; background: linear-gradient(180deg, #0c1f14, #143a1c);
+            width: 250px; background: linear-gradient(180deg, #0F2E19, #14532D);
             color: #fff; flex-shrink: 0; display: flex; flex-direction: column;
             position: fixed; top: 0; bottom: 0; left: 0; overflow-y: auto; z-index: 100;
         }
         .brand-admin { padding: 22px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; }
-        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; }
+        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center;  color: #fff;}
+        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; 
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: #fff;
+        }
+        
         .brand-admin small { color: rgba(255,255,255,0.6); display: block; }
         .nav-menu { padding: 16px 12px; flex: 1; }
         .nav-label { color: rgba(255,255,255,0.4); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; padding: 12px 12px 6px; }
@@ -150,6 +163,10 @@ $page_title = 'Journaux d\'activité - PharmaGeo';
         .user-profile .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; font-weight: 800; }
         .user-profile .name { font-size: 0.9rem; font-weight: 600; }
         .user-profile .role { font-size: 0.75rem; color: rgba(255,255,255,0.6); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
 
         /* ===== CONTENU PRINCIPAL ===== */
         .main-content { flex: 1; margin-left: 250px; padding: 24px; }
@@ -159,36 +176,36 @@ $page_title = 'Journaux d\'activité - PharmaGeo';
 
         /* ===== CARTE & FILTRES ===== */
         .card-admin { background: #fff; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.05); overflow: hidden; }
-        .filter-bar { background: #f8faf9; padding: 16px; border-bottom: 1px solid #eef1f0; display: flex; flex-wrap: wrap; gap: 10px; }
-        .filter-bar input, .filter-bar select { border: 1.5px solid #e6ebe9; border-radius: 8px; padding: 9px 12px; font-size: 0.9rem; }
-        .badge-succes { background: rgba(42,195,42,0.12); color: #1e8e1e; }
-        .badge-echec { background: rgba(231,76,60,0.12); color: #c0392b; }
+        .filter-bar { background: #F0FDF4; padding: 16px; border-bottom: 1px solid #F0FDF4; display: flex; flex-wrap: wrap; gap: 10px; }
+        .filter-bar input, .filter-bar select { border: 1.5px solid #D9E9DF; border-radius: 8px; padding: 9px 12px; font-size: 0.9rem; }
+        .badge-succes { background: rgba(22,163,74,0.12); color: #166534; }
+        .badge-echec { background: rgba(220,38,38,0.12); color: #B91C1C; }
         /* ===== TABLEAU ===== */
         .table { margin: 0; }
-        .table thead th { background: #f8faf9; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray-text); border-bottom: 1px solid #eef1f0; padding: 12px; white-space: nowrap; }
-        .table tbody td { padding: 12px; vertical-align: middle; font-size: 0.9rem; border-color: #eef1f0; }
+        .table thead th { background: #F0FDF4; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray-text); border-bottom: 1px solid #F0FDF4; padding: 12px; white-space: nowrap; }
+        .table tbody td { padding: 12px; vertical-align: middle; font-size: 0.9rem; border-color: #F0FDF4; }
         /* ===== PAGINATION ===== */
         .pagination-custom { display: flex; gap: 6px; justify-content: center; padding: 16px; }
-        .pagination-custom a, .pagination-custom span { padding: 8px 13px; border-radius: 8px; text-decoration: none; font-size: 0.9rem; background: #fff; color: var(--dark-text); border: 1px solid #eef1f0; }
+        .pagination-custom a, .pagination-custom span { padding: 8px 13px; border-radius: 8px; text-decoration: none; font-size: 0.9rem; background: #fff; color: var(--dark-text); border: 1px solid #F0FDF4; }
         .pagination-custom a.current { background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); color: #fff; border: none; }
         .empty-state { text-align: center; padding: 60px 20px; color: var(--gray-text); }
-        .empty-state i { font-size: 3rem; color: #d5dbe0; }
+        .empty-state i { font-size: 3rem; color: #D9E9DF; }
         @media (max-width: 991px) {
             .sidebar-admin { position: fixed; transform: translateX(-100%); transition: transform 0.3s ease; }
             .sidebar-admin.open { transform: translateX(0); }
             .main-content { margin-left: 0; }
-        }
-    </style>
-    <link rel="stylesheet" href="../assets/css/responsive.css">
+        }    </style>
+    <link rel="stylesheet" href="../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
     <div class="layout">
         <!-- ===== SIDEBAR ===== -->
         <aside class="sidebar-admin" id="sidebar">
-            <div class="brand-admin">
+            <a href="<?php echo BASE_URL; ?>index.php" class="brand-admin" style="text-decoration: none;">
                 <div class="brand-icon"><i class="fas fa-hospital"></i></div>
                 <div><h4>PharmaGeo</h4><small>Administration</small></div>
-            </div>
+            </a>
             <nav class="nav-menu">
                 <div class="nav-label">Navigation</div>
                 <a href="<?php echo BASE_URL; ?>admin/dashboard.php" class="nav-item"><i class="fas fa-tachometer-alt"></i><span>Tableau de bord</span></a>
@@ -202,16 +219,22 @@ $page_title = 'Journaux d\'activité - PharmaGeo';
                 <a href="<?php echo BASE_URL; ?>admin/logs.php" class="nav-item active"><i class="fas fa-history"></i><span>Journaux</span></a>
                 <div class="nav-label" style="margin-top: 20px;">Système</div>
                 <a href="<?php echo BASE_URL; ?>admin/parametres.php" class="nav-item"><i class="fas fa-cog"></i><span>Paramètres</span></a>
-                <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
+
             </nav>
-            <div class="user-profile">
-                <div class="avatar"><?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?></div>
+            <a class="user-profile" href="<?php echo BASE_URL; ?>admin/profil.php" title="Voir mon profil">
+                <div class="avatar"><?php if (!empty($_SESSION['photo']) && pharma_image_disponible($_SESSION['photo'])): ?><img src="<?php echo htmlspecialchars(pharma_image_url($_SESSION['photo'])); ?>" alt=""><?php else: ?><?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?><?php endif; ?></div>
                 <div>
                     <div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div>
-                    <div class="role"><i class="fas fa-crown me-1" style="color:#f1c40f;"></i> Administrateur</div>
-                </div>
-            </div>
-        </aside>
+                    <div class="role"><i class="fas fa-crown me-1" style="color:#DC2626;"></i> Administrateur</div>
+                <i class="fas fa-chevron-right profile-chevron"></i>
+            </a>
+        
+    <?php require_once __DIR__ . '/../includes/reinitialiser.php'; echo html_bloc_reinitialiser(); ?>
+    <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.15); margin-top: auto; text-decoration: none;">
+        <i class="fas fa-sign-out-alt"></i>
+        <span>Déconnexion</span>
+    </a>
+    </aside>
 
         <!-- ===== MAIN ===== -->
         <main class="main-content">
@@ -266,7 +289,7 @@ $page_title = 'Journaux d\'activité - PharmaGeo';
                             <tbody>
                                 <?php foreach ($logs as $i => $log): ?>
                                     <tr>
-                                        <td><?php echo $offset + $i + 1; ?></td>
+                                        <td><?php echo $pagination['debut'] + $i; ?></td>
                                         <td class="text-nowrap"><?php echo date('d/m/Y H:i', strtotime($log['Date_action'])); ?></td>
                                         <td><i class="fas fa-circle me-1" style="font-size:0.5rem;color:var(--primary-green);"></i><?php echo htmlspecialchars($log['Action']); ?></td>
                                         <td>
@@ -286,20 +309,14 @@ $page_title = 'Journaux d\'activité - PharmaGeo';
                         </table>
                     </div>
 
-                    <?php if ($total_pages > 1): ?>
-                        <div class="pagination-custom">
-                            <?php
-                            // Prépare l'URL en conservant les filtres actifs
-                            $query = http_build_query(array_filter([
-                                'search' => $search, 'action' => $filtre_action, 'resultat' => $filtre_resultat,
-                                'date_debut' => $filtre_date_debut, 'date_fin' => $filtre_date_fin
-                            ]));
-                            for ($i = 1; $i <= $total_pages; $i++):
-                            ?>
-                                <a href="logs.php?<?php echo $query; ?>&page=<?php echo $i; ?>" class="<?php echo $i === $page ? 'current' : ''; ?>"><?php echo $i; ?></a>
-                            <?php endfor; ?>
-                        </div>
-                    <?php endif; ?>
+<!-- ===== PAGINATION ===== -->
+                    <?php pagination_afficher($pagination, [
+                        'search'     => $search,
+                        'action'     => $filtre_action,
+                        'resultat'   => $filtre_resultat,
+                        'date_debut' => $filtre_date_debut,
+                        'date_fin'   => $filtre_date_fin
+                    ], 'journaux'); ?>
                 <?php else: ?>
                     <div class="empty-state">
                         <i class="fas fa-history"></i>

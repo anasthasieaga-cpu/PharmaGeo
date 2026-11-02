@@ -36,10 +36,9 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(animateOnScroll, 100);
     window.addEventListener('scroll', animateOnScroll);
     
-    // Gestion des notifications
-    const notificationBadge = document.querySelector('.notification-badge');
-    if (notificationBadge) {
-        // Vérifier les nouvelles notifications
+    // Gestion des notifications : on rafraîchit le compteur de la cloche
+    // s'il y a quelqu'un de connecté, même si aucune pastille n'est affichée.
+    if (document.getElementById('notificationsDropdown')) {
         checkNotifications();
     }
     
@@ -64,29 +63,47 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // ===== Fonctions utilitaires =====
 
-// Vérifier les notifications
+// Vérifier les notifications et rafraîchir la pastille de la cloche.
 function checkNotifications() {
-    const userId = document.querySelector('[data-user-id]')?.dataset.userId;
-    if (!userId) return;
-    
-    fetch(window.BASE_URL + 'api/notifications.php?user=' + userId)
-        .then(response => response.json())
+    const lien = document.getElementById('notificationsDropdown');
+    if (!lien) return;
+
+    fetch(window.BASE_URL + 'api/notifications.php', { credentials: 'same-origin' })
+        .then(response => response.ok ? response.json() : null)
         .then(data => {
-            const badge = document.querySelector('.badge-dot');
-            if (badge && data.unread > 0) {
-                badge.style.display = 'block';
-                badge.textContent = data.unread > 9 ? '9+' : data.unread;
+            if (!data) return;
+
+            const total = parseInt(data.unread, 10) || 0;
+            let badge = lien.querySelector('.notification-badge');
+
+            if (total > 0) {
+                if (!badge) {
+                    badge = document.createElement('span');
+                    badge.className = 'position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger notification-badge';
+                    badge.style.fontSize = '0.6rem';
+                    lien.appendChild(badge);
+                }
+                badge.textContent = data.label;
+                badge.dataset.unread = total;
+            } else if (badge) {
+                badge.remove();
             }
         })
         .catch(error => console.error('Erreur notifications:', error));
 }
 
-// Formater la distance
-function formatDistance(km) {
-    if (km < 1) {
-        return Math.round(km * 1000) + ' m';
+// Formater une distance exprimée en mètres.
+// Mêmes règles que geoFormaterDistance() (includes/geo.php) : arrondi à 10 m
+// sous 1 km, deux décimales au-delà. Une valeur nulle signifie « position
+// inconnue » : on ne renvoie alors aucun nombre, pour ne pas publier une
+// distance calculée depuis un point par défaut.
+function formatDistance(metres) {
+    if (metres === null || metres === undefined || isNaN(metres)) return '';
+    if (metres < 1000) {
+        if (metres < 10) return Math.round(metres) + ' m';
+        return (Math.round(metres / 10) * 10) + ' m';
     }
-    return km.toFixed(2) + ' km';
+    return (Math.round(metres / 10) / 100).toFixed(2).replace('.', ',') + ' km';
 }
 
 // Formater les dates

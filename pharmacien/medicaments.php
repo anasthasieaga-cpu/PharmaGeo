@@ -12,6 +12,12 @@ ini_set('display_errors', 1);
 // ===== DÉFINITION DES CONSTANTES =====
 define('BASE_URL', 'http://localhost/pharmageo/');
 
+// ===== FONCTIONS UTILITAIRES =====
+require_once __DIR__ . '/../includes/fonctions.php';
+
+// ===== PAGINATION (10 éléments par page) =====
+require_once __DIR__ . '/../includes/pagination.php';
+
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
     $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
@@ -24,6 +30,13 @@ try {
 // ===== GESTION DES SESSIONS =====
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
+}
+
+// ===== MESSAGE FLASH (PRG) : stoque le message puis redirige vers une URL propre ====
+function redirectWithMessage(string $message, string $type = 'success'): void {
+    $_SESSION['flash_message'] = ['type' => $type, 'text' => $message];
+    header('Location: ' . BASE_URL . 'pharmacien/medicaments.php');
+    exit;
 }
 
 // ===== VÉRIFICATION PHARMACIEN =====
@@ -285,7 +298,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 // ===== SUPPRESSION D'UN STOCK =====
-if (isset($_GET['action']) && $_GET['action'] === 'supprimer' && isset($_GET['id'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'supprimer' && isset($_GET['id'])) {
     $id = (int)$_GET['id'];
     try {
         // Vérifier si le stock a des réservations
@@ -318,6 +331,126 @@ if (isset($_GET['action']) && $_GET['action'] === 'supprimer' && isset($_GET['id
     }
 }
 
+// ===== SUSPENSION / RÉACTIVATION D'UN STOCK =====
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && in_array($_GET['action'], ['suspendre', 'reactiver']) && isset($_GET['id'])) {
+    $id = (int)$_GET['id'];
+    try {
+        if ($_GET['action'] === 'suspendre') {
+            // Vérifier que le stock appartient bien à cette pharmacie
+            $check = $pdo->prepare("
+                SELECT s.Id_stock, s.Statut, s.Quantite, s.Id_medicament, m.Nom_commercial
+                FROM stock s
+                JOIN medicament m ON s.Id_medicament = m.Id_medicament
+                WHERE s.Id_stock = :id AND s.Id_pharmacie = :pharmacie
+            ");
+            $check->execute([':id' => $id, ':pharmacie' => $pharmacie_id]);
+            $stock = $check->fetch();
+
+            if (!$stock) {
+                $message = "Stock introuvable pour cette pharmacie.";
+                $message_type = "danger";
+            } elseif ($stock['Statut'] === 'desactive') {
+                $message = "Ce médicament est déjà suspendu.";
+                $message_type = "warning";
+            } else {
+                // 1. Désactiver le stock (il ne sera plus proposé aux patients)
+                $stmt = $pdo->prepare("UPDATE stock SET Statut = 'desactive', Date_mise_a_jour = NOW() WHERE Id_stock = :id AND Id_pharmacie = :pharmacie");
+                $stmt->execute([':id' => $id, ':pharmacie' => $pharmacie_id]);
+
+                // 2. Annuler les réservations en cours (en attente ou confirmées)
+                //    liées à ce stock et notifier les patients concernés.
+                $nb_annulations = 0;
+                $res = $pdo->prepare("
+                    SELECT r.Id_reservation, r.Quantite, r.Id_utilisateur
+                    FROM reservation r
+                    WHERE r.Id_stock = :id AND r.Statut IN ('en_attente', 'confirmee')
+                ");
+                $res->execute([':id' => $id]);
+                $reservations_a_annuler = $res->fetchAll();
+
+                if (!empty($reservations_a_annuler)) {
+                    $maj = $pdo->prepare("UPDATE reservation SET Statut = 'annulee' WHERE Id_reservation = :rid");
+                    $notif = $pdo->prepare("
+                        INSERT INTO notification (Titre, Message, Type, Lu, Id_utilisateur)
+                        VALUES ('Réservation annulée', :message, 'annulation', 0, :user)
+                    ");
+                    foreach ($reservations_a_annuler as $rv) {
+                        $maj->execute([':rid' => $rv['Id_reservation']]);
+                        $notif->execute([
+                            ':message' => 'Votre réservation pour « ' . $stock['Nom_commercial'] . ' » (x' . $rv['Quantite'] . ') '
+                                        . 'a été annulée car la pharmacie a suspendu ce médicament.',
+                            ':user' => $rv['Id_utilisateur']
+                        ]);
+                        $nb_annulations++;
+                    }
+                }
+
+                // 3. Journalisation
+                $log = $pdo->prepare("
+                    INSERT INTO log (Action, Adresse_ip, Navigateur, Resultat, Id_utilisateur)
+                    VALUES (CONCAT('Suspension stock ID: ', :id, ' (', :nb, ' réservation(s) annulée(s))'), :ip, :ua, 'succes', :user)
+                ");
+                $log->execute([
+                    ':id' => $id,
+                    ':nb' => $nb_annulations,
+                    ':ip' => $_SERVER['REMOTE_ADDR'] ?? '',
+                    ':ua' => $_SERVER['HTTP_USER_AGENT'] ?? '',
+                    ':user' => $_SESSION['user_id']
+                ]);
+
+                $message = "Médicament « " . $stock['Nom_commercial'] . " » suspendu avec succès !";
+                if ($nb_annulations > 0) {
+                    $message .= " " . $nb_annulations . " réservation(s) en cours ont été annulées et les patients ont été notifiés.";
+                }
+                $message_type = "success";
+            }
+        } else {
+            // Réactivation : recompute le statut selon la quantité et le seuil
+            $old = $pdo->prepare("SELECT Quantite, Seuil_alerte FROM stock WHERE Id_stock = :id AND Id_pharmacie = :pharmacie");
+            $old->execute([':id' => $id, ':pharmacie' => $pharmacie_id]);
+            $info = $old->fetch();
+            if (!$info) {
+                $message = "Stock introuvable.";
+                $message_type = "danger";
+            } else {
+                $statut = 'disponible';
+                if ($info['Quantite'] == 0) {
+                    $statut = 'rupture';
+                } elseif ($info['Quantite'] <= $info['Seuil_alerte']) {
+                    $statut = 'stock_faible';
+                }
+                
+                $stmt = $pdo->prepare("UPDATE stock SET Statut = :statut, Date_mise_a_jour = NOW() WHERE Id_stock = :id AND Id_pharmacie = :pharmacie");
+                $stmt->execute([':statut' => $statut, ':id' => $id, ':pharmacie' => $pharmacie_id]);
+                
+                $log = $pdo->prepare("
+                    INSERT INTO log (Action, Adresse_ip, Navigateur, Resultat, Id_utilisateur)
+                    VALUES (CONCAT('Réactivation stock ID: ', :id), :ip, :ua, 'succes', :user)
+                ");
+                $log->execute([
+                    ':id' => $id,
+                    ':ip' => $_SERVER['REMOTE_ADDR'] ?? '',
+                    ':ua' => $_SERVER['HTTP_USER_AGENT'] ?? '',
+                    ':user' => $_SESSION['user_id']
+                ]);
+                
+                $message = "Médicament réactivé avec succès !";
+                $message_type = "success";
+            }
+        }
+    } catch(PDOException $e) {
+        $message = "Erreur lors de la modification du statut : " . $e->getMessage();
+        $message_type = "danger";
+    }
+}
+
+// ===== REDIRECTION PRG : URL propre + message en session =====
+// Évite qu'un ?action=supprimer&id=X reste dans l'URL et ré-exécute
+// l'action suivante (bug du message qui ne change pas après un ajout).
+if ($message !== '') {
+    redirectWithMessage($message, $message_type);
+}
+
 // ===== RÉCUPÉRATION DES DONNÉES (CORRIGÉ) =====
 try {
     // Récupérer tous les médicaments disponibles (pour l'ajout) - CORRECTION ICI
@@ -325,7 +458,8 @@ try {
         SELECT m.*, c.Libelle as Categorie
         FROM medicament m
         LEFT JOIN categorie c ON m.Id_categorie = c.Id_categorie
-        WHERE NOT EXISTS (
+        WHERE m.Statut = 'actif'
+        AND NOT EXISTS (
             SELECT 1 FROM stock s 
             WHERE s.Id_medicament = m.Id_medicament 
             AND s.Id_pharmacie = :pharmacie
@@ -335,7 +469,23 @@ try {
     $medicaments_disponibles->execute([':pharmacie' => $pharmacie_id]);
     $medicaments_disponibles = $medicaments_disponibles->fetchAll();
 
-    // Récupérer les médicaments en stock avec leurs informations
+    // Statistiques calculées sur l'INTÉGRALITÉ du stock de la pharmacie
+    // (indispensable : elles doivent rester justes malgré la pagination)
+    $stmt_stats = $pdo->prepare("
+        SELECT COUNT(*) as total,
+               SUM(CASE WHEN Statut = 'disponible' THEN 1 ELSE 0 END) as disponibles,
+               SUM(CASE WHEN Statut = 'stock_faible' THEN 1 ELSE 0 END) as stock_faible,
+               SUM(CASE WHEN Statut = 'rupture' THEN 1 ELSE 0 END) as rupture
+        FROM stock
+        WHERE Id_pharmacie = :pharmacie
+    ");
+    $stmt_stats->execute([':pharmacie' => $pharmacie_id]);
+    $stats = array_map(function($v) { return (int) $v; }, $stmt_stats->fetch() ?: []);
+
+    // Nombre total (sert aussi à la pagination)
+    $pagination = pagination_calculer($stats['total']);
+
+    // Récupérer les médicaments en stock de la page courante avec leurs informations
     $medicaments_stock = $pdo->prepare("
         SELECT s.*, m.Nom_commercial, m.DCI, m.Forme, m.Dosage, m.Description,
                c.Libelle as Categorie,
@@ -345,7 +495,7 @@ try {
         LEFT JOIN categorie c ON m.Id_categorie = c.Id_categorie
         WHERE s.Id_pharmacie = :pharmacie
         ORDER BY m.Nom_commercial ASC
-    ");
+    " . pagination_sql_limite($pagination));
     $medicaments_stock->execute([':pharmacie' => $pharmacie_id]);
     $medicaments_stock = $medicaments_stock->fetchAll();
 
@@ -424,28 +574,121 @@ try {
         'Salbutamol', 'Ventoline', 'Dextrométhorphane', 'Carbocistéine', 'Pseudoéphédrine', 'Actifed',
         'Sirops antitussifs', 'Spray nasal'];
 
+    // Mapping catalogue : nom -> [DCI, Dosage, Forme, Catégorie]
+    $catalogue_mapping = [
+        // Antalgiques / Antipyrétiques
+        'Paracétamol' => ['Paracétamol', '500 mg', 'Comprimé', 'Antipyrétiques'],
+        'Doliprane' => ['Paracétamol', '1000 mg', 'Comprimé', 'Antipyrétiques'],
+        'Efferalgan' => ['Paracétamol', '500 mg', 'Comprimé effervescent', 'Antipyrétiques'],
+        'Paracetamol Vitamine C' => ['Paracétamol', '500 mg', 'Comprimé effervescent', 'Antipyrétiques'],
+        'Ibuprofène' => ['Ibuprofène', '200 mg', 'Comprimé', 'Anti-inflammatoires'],
+        'Advil' => ['Ibuprofène', '200 mg', 'Gélule', 'Anti-inflammatoires'],
+        'Nurofen' => ['Ibuprofène', '400 mg', 'Comprimé', 'Anti-inflammatoires'],
+        'Aspirine' => ['Acide acétylsalicylique', '500 mg', 'Comprimé', 'Antalgiques'],
+        'Diclofénac' => ['Diclofénac', '50 mg', 'Comprimé', 'Anti-inflammatoires'],
+        'Voltarène' => ['Diclofénac', '75 mg', 'Injectable (IV/IM)', 'Anti-inflammatoires'],
+        'Kétoprofène' => ['Kétoprofène', '100 mg', 'Gélule', 'Anti-inflammatoires'],
+        'Acupan' => ['Néfopam', '20 mg', 'Injectable (IV/IM)', 'Antalgiques'],
+        'Efferalgan Codeine' => ['Paracétamol/Codeine', '500/30 mg', 'Comprimé', 'Antalgiques'],
+        // Antibiotiques
+        'Amoxicilline' => ['Amoxicilline', '500 mg', 'Gélule', 'Antibiotiques'],
+        'Augmentin' => ['Amoxicilline/Acide clavulanique', '1g/125 mg', 'Comprimé', 'Antibiotiques'],
+        'Amoxicilline Acide Clavulanique' => ['Amoxicilline/Acide clavulanique', '1g/125 mg', 'Comprimé', 'Antibiotiques'],
+        'Ospamox' => ['Amoxicilline', '1000 mg', 'Gélule', 'Antibiotiques'],
+        'Azithromycine' => ['Azithromycine', '500 mg', 'Comprimé', 'Antibiotiques'],
+        'Zithromax' => ['Azithromycine', '250 mg', 'Comprimé', 'Antibiotiques'],
+        'Ciprofloxacine' => ['Ciprofloxacine', '500 mg', 'Comprimé', 'Antibiotiques'],
+        'Ciflos' => ['Ciprofloxacine', '250 mg', 'Comprimé', 'Antibiotiques'],
+        'Ceftriaxone' => ['Ceftriaxone', '1000 mg', 'Injectable (IV/IM)', 'Antibiotiques'],
+        'Céfixime' => ['Céfixime', '200 mg', 'Comprimé', 'Antibiotiques'],
+        'Doxycycline' => ['Doxycycline', '100 mg', 'Gélule', 'Antibiotiques'],
+        'Érythromycine' => ['Érythromycine', '500 mg', 'Comprimé', 'Antibiotiques'],
+        'Métronidazole' => ['Métronidazole', '500 mg', 'Comprimé', 'Antibiotiques'],
+        'Flagyl' => ['Métronidazole', '250 mg', 'Comprimé', 'Antibiotiques'],
+        'Cotrimoxazole' => ['Cotrimoxazole', '480 mg', 'Comprimé', 'Antibiotiques'],
+        'Bactrim' => ['Cotrimoxazole', '480 mg', 'Comprimé', 'Antibiotiques'],
+        // Antipaludiques
+        'Artéméther Luméfantrine' => ['Artéméther/Luméfantrine', '20/120 mg', 'Comprimé', 'Antipaludiques'],
+        'Coartem' => ['Artéméther/Luméfantrine', '20/120 mg', 'Comprimé', 'Antipaludiques'],
+        'Artesunate' => ['Artesunate', '100 mg', 'Comprimé', 'Antipaludiques'],
+        'Quinine' => ['Quinine', '300 mg', 'Comprimé', 'Antipaludiques'],
+        'Fansidar' => ['Sulfadoxine/Pyriméthamine', '500/25 mg', 'Comprimé', 'Antipaludiques'],
+        'Malarone' => ['Atovaquone/Proguanil', '250/100 mg', 'Comprimé', 'Antipaludiques'],
+        // Gastro
+        'Oméprazole' => ['Oméprazole', '20 mg', 'Gélule', 'Antiacides'],
+        'Mopral' => ['Oméprazole', '20 mg', 'Gélule', 'Antiacides'],
+        'Esoméprazole' => ['Esoméprazole', '20 mg', 'Gélule', 'Antiacides'],
+        'Inexium' => ['Esoméprazole', '40 mg', 'Comprimé', 'Antiacides'],
+        'Ranitidine' => ['Ranitidine', '150 mg', 'Comprimé', 'Antiacides'],
+        'Dompéridone' => ['Dompéridone', '10 mg', 'Comprimé', 'Antispasmodiques'],
+        'Motilium' => ['Dompéridone', '10 mg', 'Comprimé', 'Antispasmodiques'],
+        'Lopéramide' => ['Lopéramide', '2 mg', 'Gélule', 'Antidiarrhéiques'],
+        'Imodium' => ['Lopéramide', '2 mg', 'Gélule', 'Antidiarrhéiques'],
+        'Spasfon' => ['Phloroglucinol', '80 mg', 'Comprimé', 'Antispasmodiques'],
+        'Gaviscon' => ['Alginates de sodium', '500 mg', 'Comprimé à croquer', 'Antiacides'],
+        // Cardio / Métabolisme
+        'Amlodipine' => ['Amlodipine', '5 mg', 'Comprimé', 'Antihypertenseurs'],
+        'Amlor' => ['Amlodipine', '5 mg', 'Comprimé', 'Antihypertenseurs'],
+        'Losartan' => ['Losartan', '50 mg', 'Comprimé', 'Antihypertenseurs'],
+        'Cozzar' => ['Losartan', '50 mg', 'Comprimé', 'Antihypertenseurs'],
+        'Captopril' => ['Captopril', '25 mg', 'Comprimé', 'Antihypertenseurs'],
+        'Metformine' => ['Metformine', '850 mg', 'Comprimé', 'Antidiabétiques'],
+        'Glucophage' => ['Metformine', '850 mg', 'Comprimé', 'Antidiabétiques'],
+        'Simvastatine' => ['Simvastatine', '20 mg', 'Comprimé', 'Cardiovasculaires'],
+        'Atorvastatine' => ['Atorvastatine', '20 mg', 'Comprimé', 'Cardiovasculaires'],
+        'Hydrochlorothiazide' => ['Hydrochlorothiazide', '25 mg', 'Comprimé', 'Diurétiques'],
+        'Furosémide' => ['Furosémide', '40 mg', 'Comprimé', 'Diurétiques'],
+        'Lasilix' => ['Furosémide', '40 mg', 'Comprimé', 'Diurétiques'],
+        // Allergie
+        'Loratadine' => ['Loratadine', '10 mg', 'Comprimé', 'Antihistaminiques'],
+        'Clarityne' => ['Loratadine', '10 mg', 'Comprimé', 'Antihistaminiques'],
+        'Cétirizine' => ['Cétirizine', '10 mg', 'Comprimé', 'Antihistaminiques'],
+        'Zyrtec' => ['Cétirizine', '10 mg', 'Comprimé', 'Antihistaminiques'],
+        'Lévocétirizine' => ['Lévocétirizine', '5 mg', 'Comprimé', 'Antihistaminiques'],
+        'Dexaméthasone' => ['Dexaméthasone', '0,75 mg', 'Comprimé', 'Corticostéroïdes'],
+        // Vitamines / Compléments
+        'Vitamine C' => ['Acide ascorbique', '1000 mg', 'Comprimé effervescent', 'Vitamines'],
+        'Redoxon' => ['Acide ascorbique', '1000 mg', 'Comprimé effervescent', 'Vitamines'],
+        'Vitamine D' => ['Vitamine D', '1000 UI', 'Gélule', 'Vitamines'],
+        'Zinc' => ['Zinc', '20 mg', 'Comprimé', 'Minéraux'],
+        'Fer Folate' => ['Fer/Folate', '50 mg', 'Comprimé', 'Compléments alimentaires'],
+        'Complexe B' => ['Complexe B', '', 'Comprimé', 'Vitamines'],
+        'Supradyn' => ['Multivitamines', '', 'Comprimé effervescent', 'Vitamines'],
+        'Multivitamines' => ['Multivitamines', '', 'Gélule', 'Vitamines'],
+        'Calcium Vitamine D' => ['Calcium/Vitamine D', '', 'Comprimé', 'Minéraux'],
+        'Magnésium' => ['Magnésium', '300 mg', 'Comprimé', 'Minéraux'],
+        // Antiseptiques / Dermatologiques
+        'Betadine' => ['Povidone iodée', '10 %', 'Solution', 'Antiseptiques'],
+        'Bétadine Solution' => ['Povidone iodée', '10 %', 'Solution', 'Antiseptiques'],
+        'Alcool 70°' => ['Alcool éthylique', '70 %', 'Solution', 'Antiseptiques'],
+        'Eau Oxygénée' => ['Eau oxygénée', '10 %', 'Solution', 'Antiseptiques'],
+        'Chlorhexidine' => ['Chlorhexidine', '0,5 %', 'Solution', 'Antiseptiques'],
+        'Hydrocortisone Crème' => ['Hydrocortisone', '1 %', 'Crème', 'Dermatologiques'],
+        'Miconazole' => ['Miconazole', '2 %', 'Crème', 'Antifongiques'],
+        'Daktarin' => ['Miconazole', '2 %', 'Gel oral', 'Antifongiques'],
+        'Clotrimazole' => ['Clotrimazole', '1 %', 'Crème', 'Antifongiques'],
+        'Éosine' => ['Éosine', '2 %', 'Solution', 'Dermatologiques'],
+        // Voies respiratoires
+        'Salbutamol' => ['Salbutamol', '100 µg', 'Aérosol', 'Bronchodilatateurs'],
+        'Ventoline' => ['Salbutamol', '100 µg', 'Aérosol', 'Bronchodilatateurs'],
+        'Dextrométhorphane' => ['Dextrométhorphane', '15 mg', 'Sirop', 'Antitussifs'],
+        'Carbocistéine' => ['Carbocistéine', '750 mg', 'Sirop', 'Expectorants'],
+        'Pseudoéphédrine' => ['Pseudoéphédrine', '60 mg', 'Comprimé', 'Décongestionnants'],
+        'Actifed' => ['Pseudoéphédrine/Triprolidine', '', 'Comprimé', 'Décongestionnants'],
+        'Sirops antitussifs' => ['Dextrométhorphane', '15 mg/5 ml', 'Sirop', 'Antitussifs'],
+        'Spray nasal' => ['Xylométazoline', '0,1 %', 'Spray nasal', 'Décongestionnants'],
+    ];
+
     // Fusionner (sans doublons) les valeurs de base avec celles du catalogue
     $liste_dci = array_values(array_unique(array_merge($liste_dci_ref, $liste_dci_base)));
     $liste_formes = array_values(array_unique(array_merge($liste_formes_ref, $liste_formes_base)));
     $liste_dosages = array_values(array_unique(array_merge($liste_dosages_ref, $liste_dosages_base)));
 
-    // Statistiques
-    $stats = [
-        'total' => count($medicaments_stock),
-        'disponibles' => 0,
-        'stock_faible' => 0,
-        'rupture' => 0
-    ];
-    foreach ($medicaments_stock as $m) {
-        if ($m['Statut'] === 'disponible') $stats['disponibles']++;
-        elseif ($m['Statut'] === 'stock_faible') $stats['stock_faible']++;
-        elseif ($m['Statut'] === 'rupture') $stats['rupture']++;
-    }
-
 } catch(PDOException $e) {
     $medicaments_disponibles = [];
     $medicaments_stock = [];
     $categories = [];
+    $pagination = pagination_calculer(0);
     $stats = ['total' => 0, 'disponibles' => 0, 'stock_faible' => 0, 'rupture' => 0];
     $message = "Erreur lors du chargement des données : " . $e->getMessage();
     $message_type = "danger";
@@ -453,7 +696,7 @@ try {
 
 // ===== RÉCUPÉRATION D'UN STOCK POUR MODIFICATION =====
 $edit_stock = null;
-if (isset($_GET['action']) && $_GET['action'] === 'edit' && isset($_GET['id'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'edit' && isset($_GET['id'])) {
     $id = (int)$_GET['id'];
     $stmt = $pdo->prepare("
         SELECT s.*, m.Nom_commercial, m.DCI, m.Forme, m.Dosage
@@ -489,17 +732,17 @@ $page_title = 'Mes médicaments - PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --light-bg: #f0f2f5;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --light-bg: #F0FDF4;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-sm: 0 2px 20px rgba(0,0,0,0.04);
             --shadow-md: 0 8px 40px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
-            --shadow-glow-orange: 0 8px 40px rgba(200, 120, 30, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
+            --shadow-glow-orange: 0 8px 40px rgba(21,128,61, 0.20);
             --radius: 16px;
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -592,7 +835,7 @@ $page_title = 'Mes médicaments - PharmaGeo';
         .nav-link-custom:hover,
         .nav-link-custom.active {
             color: var(--primary-green);
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
         }
 
         .nav-link-custom::after {
@@ -614,32 +857,39 @@ $page_title = 'Mes médicaments - PharmaGeo';
         }
 
         .btn-nav-logout {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            background: linear-gradient(135deg, #DC2626, #B91C1C);
             color: white !important;
             padding: 8px 24px !important;
             border-radius: 50px !important;
             font-weight: 600;
             transition: var(--transition);
             border: none;
-            box-shadow: 0 4px 15px rgba(231,76,60,0.2);
+            box-shadow: 0 4px 15px rgba(220,38,38,0.2);
         }
 
         .btn-nav-logout:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(231,76,60,0.35);
+            box-shadow: 0 8px 30px rgba(220,38,38,0.35);
             color: white !important;
         }
 
         /* ===== LAYOUT / SIDEBAR ===== */
         .layout { display: flex; min-height: 100vh; }
         .sidebar-admin {
-            width: 250px; background: linear-gradient(180deg, #0c1f14, #143a1c);
+            width: 250px; background: linear-gradient(180deg, #0F2E19, #14532D);
             color: #fff; flex-shrink: 0; display: flex; flex-direction: column;
             position: fixed; top: 0; bottom: 0; left: 0; overflow-y: auto; z-index: 100;
         }
         .brand-admin { padding: 22px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; }
-        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; }
+        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center;  color: #fff;}
+        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; 
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: #fff;
+        }
+        
         .brand-admin small { color: rgba(255,255,255,0.6); display: block; }
         .nav-menu { padding: 16px 12px; flex: 1; }
         .nav-label { color: rgba(255,255,255,0.4); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; padding: 12px 12px 6px; }
@@ -651,6 +901,10 @@ $page_title = 'Mes médicaments - PharmaGeo';
         .user-profile .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; font-weight: 800; }
         .user-profile .name { font-size: 0.9rem; font-weight: 600; }
         .user-profile .role { font-size: 0.75rem; color: rgba(255,255,255,0.6); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
         @media (max-width: 991px) {
             .sidebar-admin { position: fixed; transform: translateX(-100%); transition: transform 0.3s ease; }
             .sidebar-admin.open { transform: translateX(0); }
@@ -722,7 +976,7 @@ $page_title = 'Mes médicaments - PharmaGeo';
 
         .top-bar .page-actions .btn-action.btn-primary-custom:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 40px rgba(42,195,42,0.35);
+            box-shadow: 0 12px 40px rgba(22,163,74,0.35);
         }
 
         .top-bar .page-actions .btn-action.btn-outline-custom {
@@ -791,23 +1045,23 @@ $page_title = 'Mes médicaments - PharmaGeo';
         }
 
         .stat-card .stat-icon.green {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .stat-card .stat-icon.orange {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
         .stat-card .stat-icon.blue {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         .stat-card .stat-icon.red {
-            background: rgba(231,76,60,0.1);
-            color: #e74c3c;
+            background: rgba(220,38,38,0.1);
+            color: #DC2626;
         }
 
         .stat-card .stat-number {
@@ -843,14 +1097,14 @@ $page_title = 'Mes médicaments - PharmaGeo';
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--gray-text);
-            border-bottom: 2px solid #f0f0f0;
+            border-bottom: 2px solid #F0FDF4;
             padding: 12px 10px;
         }
 
         .table-custom tbody td {
             padding: 14px 10px;
             vertical-align: middle;
-            border-bottom: 1px solid #f5f5f5;
+            border-bottom: 1px solid #F0FDF4;
             font-size: 0.9rem;
         }
 
@@ -859,7 +1113,7 @@ $page_title = 'Mes médicaments - PharmaGeo';
         }
 
         .table-custom tbody tr:hover {
-            background: rgba(42,195,42,0.02);
+            background: rgba(22,163,74,0.02);
         }
 
         .table-custom tbody tr:last-child td {
@@ -875,28 +1129,28 @@ $page_title = 'Mes médicaments - PharmaGeo';
         }
 
         .badge-status.disponible {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .badge-status.stock_faible {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
         .badge-status.rupture {
-            background: rgba(231,76,60,0.1);
-            color: #e74c3c;
+            background: rgba(220,38,38,0.1);
+            color: #DC2626;
         }
 
         .badge-status.en_approvisionnement {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         .badge-status.desactive {
             background: rgba(108,117,125,0.1);
-            color: #6c757d;
+            color: #64748B;
         }
 
         /* ===== BTN ACTION ===== */
@@ -914,7 +1168,7 @@ $page_title = 'Mes médicaments - PharmaGeo';
         }
 
         .btn-action-sm.btn-edit {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
@@ -924,22 +1178,32 @@ $page_title = 'Mes médicaments - PharmaGeo';
         }
 
         .btn-action-sm.btn-delete {
-            background: rgba(231,76,60,0.1);
-            color: #e74c3c;
+            background: rgba(220,38,38,0.1);
+            color: #DC2626;
         }
 
         .btn-action-sm.btn-delete:hover {
-            background: #e74c3c;
+            background: #DC2626;
             color: white;
         }
 
         .btn-action-sm.btn-view {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         .btn-action-sm.btn-view:hover {
-            background: #3498db;
+            background: #166534;
+            color: white;
+        }
+
+        .btn-action-sm.btn-suspend {
+            background: rgba(200,150,0,0.12);
+            color: #B91C1C;
+        }
+
+        .btn-action-sm.btn-suspend:hover {
+            background: #B91C1C;
             color: white;
         }
 
@@ -958,19 +1222,19 @@ $page_title = 'Mes médicaments - PharmaGeo';
         .alert-custom i { font-size: 1.2rem; margin-top: 2px; }
 
         .alert-custom-success {
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
             color: var(--primary-green);
             border-left: 4px solid var(--primary-green);
         }
 
         .alert-custom-danger {
-            background: rgba(231,76,60,0.08);
-            color: #e74c3c;
-            border-left: 4px solid #e74c3c;
+            background: rgba(220,38,38,0.08);
+            color: #DC2626;
+            border-left: 4px solid #DC2626;
         }
 
         .alert-custom-warning {
-            background: rgba(200,120,30,0.08);
+            background: rgba(21,128,61,0.08);
             color: var(--primary-orange);
             border-left: 4px solid var(--primary-orange);
         }
@@ -1051,7 +1315,7 @@ $page_title = 'Mes médicaments - PharmaGeo';
         }
 
         .form-modern .form-label .required {
-            color: #e74c3c;
+            color: #DC2626;
             margin-left: 2px;
         }
 
@@ -1073,32 +1337,33 @@ $page_title = 'Mes médicaments - PharmaGeo';
         .form-modern .input-group-custom .form-control,
         .form-modern .input-group-custom .form-select {
             padding: 12px 16px 12px 44px;
-            border: 2px solid #e8ecf1;
+            border: 2px solid #D9E9DF;
             border-radius: 14px;
             font-size: 0.95rem;
             transition: var(--transition);
-            background: #f8f9fa;
+            background: #F0FDF4;
             color: var(--dark-text);
         }
 
         .form-modern .input-group-custom .form-control:focus,
         .form-modern .input-group-custom .form-select:focus {
             border-color: var(--primary-green);
-            box-shadow: 0 0 0 4px rgba(42,195,42,0.1);
+            box-shadow: 0 0 0 4px rgba(22,163,74,0.1);
             background: var(--white);
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/responsive.css">
+    <link rel="stylesheet" href="../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
     <!-- ===== NAVIGATION ===== -->
     <div class="layout">
     <aside class="sidebar-admin" id="sidebar">
-        <div class="brand-admin">
+        <a href="<?php echo BASE_URL; ?>index.php" class="brand-admin" style="text-decoration: none;">
             <div class="brand-icon"><i class="fas fa-hospital"></i></div>
-            <div><h4>PharmaGeo</h4><small>Pharmacien</small></div>
-        </div>
+            <div><h4>PharmaGeo</h4><small><?php echo htmlspecialchars(pharma_libelle_role('pharmacien', $user['Prenom'] ?? '')); ?></small></div>
+        </a>
         <nav class="nav-menu">
             <div class="nav-label">Navigation</div>
             <a href="<?php echo BASE_URL; ?>pharmacien/dashboard.php" class="nav-item"><i class="fas fa-tachometer-alt"></i><span>Tableau de bord</span></a>
@@ -1110,15 +1375,17 @@ $page_title = 'Mes médicaments - PharmaGeo';
             <a href="<?php echo BASE_URL; ?>pharmacien/statistiques.php" class="nav-item"><i class="fas fa-chart-bar"></i><span>Statistiques</span></a>
             <a href="<?php echo BASE_URL; ?>pharmacien/profil.php" class="nav-item"><i class="fas fa-user"></i><span>Profil</span></a>
             <div class="nav-label" style="margin-top: 20px;">Système</div>
-            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
+            <?php require_once __DIR__ . '/../includes/reinitialiser.php'; echo html_bloc_reinitialiser(); ?>
+            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.15); margin-bottom: 12px;"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
         </nav>
-        <div class="user-profile">
-            <div class="avatar"><?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?></div>
+        <a class="user-profile" href="<?php echo BASE_URL; ?>pharmacien/profil.php" title="Voir mon profil">
+            <div class="avatar"><?php if (!empty($_SESSION['photo']) && function_exists('pharma_image_disponible') && pharma_image_disponible($_SESSION['photo'])): ?><img src="<?php echo htmlspecialchars(pharma_image_url($_SESSION['photo'])); ?>" alt=""><?php else: ?><?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?><?php endif; ?></div>
             <div>
                 <div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div>
-                <div class="role"><i class="fas fa-user-md me-1" style="color:#f1c40f;"></i> Pharmacien</div>
+                <div class="role"><i class="fas fa-user-md me-1" style="color:#DC2626;"></i> <?php echo htmlspecialchars(pharma_libelle_role('pharmacien', $user['Prenom'] ?? '')); ?></div>
             </div>
-        </div>
+            <i class="fas fa-chevron-right profile-chevron"></i>
+        </a>
     </aside>
 
     <!-- ===== MAIN CONTENT ===== -->
@@ -1184,10 +1451,15 @@ $page_title = 'Mes médicaments - PharmaGeo';
         </div>
 
         <!-- ===== MESSAGES ===== -->
-        <?php if (!empty($message)): ?>
-            <div class="alert-custom alert-custom-<?php echo $message_type; ?> animate-fade-up">
-                <i class="fas fa-<?php echo $message_type === 'success' ? 'check-circle' : ($message_type === 'warning' ? 'exclamation-triangle' : 'exclamation-circle'); ?>"></i>
-                <div><?php echo $message; ?></div>
+        <?php
+        $flash = $_SESSION['flash_message'] ?? null;
+        if ($flash !== null) unset($_SESSION['flash_message']);
+        $alerte = $flash ?? (($message !== '') ? ['type' => $message_type, 'text' => $message] : null);
+        ?>
+        <?php if ($alerte !== null): ?>
+            <div class="alert-custom alert-custom-<?php echo $alerte['type']; ?> animate-fade-up">
+                <i class="fas fa-<?php echo $alerte['type'] === 'success' ? 'check-circle' : ($alerte['type'] === 'warning' ? 'exclamation-triangle' : 'exclamation-circle'); ?>"></i>
+                <div><?php echo $alerte['text']; ?></div>
             </div>
         <?php endif; ?>
 
@@ -1255,12 +1527,29 @@ $page_title = 'Mes médicaments - PharmaGeo';
                                     <td class="text-end">
                                         <div class="d-flex gap-1 justify-content-end flex-wrap">
                                             <a href="<?php echo BASE_URL; ?>pharmacien/medicaments.php?action=edit&id=<?php echo $med['Id_stock']; ?>" 
-                                               class="btn-action-sm btn-edit" data-bs-toggle="modal" data-bs-target="#editModal<?php echo $med['Id_stock']; ?>">
+                                               class="btn-action-sm btn-edit" data-bs-toggle="modal" data-bs-target="#editModal<?php echo $med['Id_stock']; ?>"
+                                               title="Modifier le stock">
                                                 <i class="fas fa-edit"></i>
                                             </a>
+                                            <?php if ($med['Statut'] === 'desactive'): ?>
+                                                <a href="<?php echo BASE_URL; ?>pharmacien/medicaments.php?action=reactiver&id=<?php echo $med['Id_stock']; ?>" 
+                                                   class="btn-action-sm btn-view"
+                                                   onclick="return confirmReactivate(<?php echo $med['Id_stock']; ?>, '<?php echo addslashes($med['Nom_commercial']); ?>')"
+                                                   title="Réactiver ce médicament (le rendre visible pour les patients)">
+                                                    <i class="fas fa-play"></i>
+                                                </a>
+                                            <?php else: ?>
+                                                <a href="<?php echo BASE_URL; ?>pharmacien/medicaments.php?action=suspendre&id=<?php echo $med['Id_stock']; ?>" 
+                                                   class="btn-action-sm btn-suspend"
+                                                   onclick="return confirmSuspend(<?php echo $med['Id_stock']; ?>, '<?php echo addslashes($med['Nom_commercial']); ?>')"
+                                                   title="Suspendre ce médicament (le masquer pour les patients de cette pharmacie)">
+                                                    <i class="fas fa-pause"></i>
+                                                </a>
+                                            <?php endif; ?>
                                             <a href="<?php echo BASE_URL; ?>pharmacien/medicaments.php?action=supprimer&id=<?php echo $med['Id_stock']; ?>" 
                                                class="btn-action-sm btn-delete"
-                                               onclick="return confirmDelete(<?php echo $med['Id_stock']; ?>, '<?php echo addslashes($med['Nom_commercial']); ?>', <?php echo $med['reservations_attente']; ?>)">
+                                               onclick="return confirmDelete(<?php echo $med['Id_stock']; ?>, '<?php echo addslashes($med['Nom_commercial']); ?>', <?php echo $med['reservations_attente']; ?>)"
+                                               title="Supprimer du stock">
                                                 <i class="fas fa-trash"></i>
                                             </a>
                                         </div>
@@ -1270,12 +1559,15 @@ $page_title = 'Mes médicaments - PharmaGeo';
                         </tbody>
                     </table>
                 </div>
+
+                <!-- ===== PAGINATION ===== -->
+                <?php pagination_afficher($pagination, [], 'médicaments en stock'); ?>
             <?php else: ?>
                 <div class="empty-state">
                     <i class="fas fa-capsules"></i>
                     <h5>Aucun médicament en stock</h5>
                     <p>Commencez par ajouter des médicaments à votre pharmacie.</p>
-                    <button class="btn btn-primary-custom mt-3" data-bs-toggle="modal" data-bs-target="#addModal" style="padding: 10px 28px; border-radius: 50px; background: linear-gradient(135deg, rgb(42,195,42), hsl(25,75%,47%)); color: white; border: none; font-weight: 600; transition: var(--transition);">
+                    <button class="btn btn-primary-custom mt-3" data-bs-toggle="modal" data-bs-target="#addModal" style="padding: 10px 28px; border-radius: 50px; background: linear-gradient(135deg, #16A34A, #166534); color: white; border: none; font-weight: 600; transition: var(--transition);">
                         <i class="fas fa-plus me-1"></i> Ajouter un médicament
                     </button>
                 </div>
@@ -1303,39 +1595,26 @@ $page_title = 'Mes médicaments - PharmaGeo';
                         <label for="medicament_select" class="form-label">Médicament <span class="required">*</span></label>
                         <div class="input-group-custom">
                             <span class="input-icon"><i class="fas fa-capsules"></i></span>
-                            <select class="form-control" id="medicament_select">
-                                <option value="">-- Sélectionnez un médicament --</option>
-                                <?php
-                                // Médicaments déjà en base (par ID) : ceux non encore en stock
-                                foreach ($medicaments_disponibles as $med):
-                                ?>
-                                    <option value="existant" data-id="<?php echo $med['Id_medicament']; ?>"
-                                            data-nom="<?php echo htmlspecialchars($med['Nom_commercial']); ?>">
-                                        <?php echo htmlspecialchars($med['Nom_commercial']); ?>
-                                        (<?php echo htmlspecialchars($med['Categorie'] ?: 'Catalogue'); ?>)
-                                    </option>
+                            <input type="text" class="form-control" id="medicament_select"
+                                   name="nouveau_medicament" list="liste_med"
+                                   placeholder="Tapez ou sélectionnez un médicament..." autocomplete="off">
+                            <datalist id="liste_med">
+                                <?php foreach ($medicaments_disponibles as $med): ?>
+                                    <option value="<?php echo htmlspecialchars($med['Nom_commercial']); ?>">
                                 <?php endforeach; ?>
-                                <optgroup label="Catalogue (médicaments fréquents)">
-                                    <?php
-                                    $noms_en_base = array_column($medicaments_disponibles, 'Nom_commercial');
-                                    foreach ($liste_medicaments_ref as $nom_ref):
-                                        if (in_array($nom_ref, $noms_en_base)) continue;
-                                    ?>
-                                        <option value="catalogue" data-nom="<?php echo htmlspecialchars($nom_ref); ?>">
-                                            <?php echo htmlspecialchars($nom_ref); ?> (Catalogue)
-                                        </option>
-                                    <?php endforeach; ?>
-                                </optgroup>
-                                <option value="autre">Autre / taper un nom libre...</option>
-                            </select>
+                                <?php
+                                $noms_en_base = array_column($medicaments_disponibles, 'Nom_commercial');
+                                foreach ($liste_medicaments_ref as $nom_ref):
+                                    if (in_array($nom_ref, $noms_en_base)) continue;
+                                ?>
+                                    <option value="<?php echo htmlspecialchars($nom_ref); ?>">
+                                <?php endforeach; ?>
+                            </datalist>
                         </div>
                         <input type="hidden" id="id_medicament" name="id_medicament" value="0">
-                        <input type="hidden" id="nom_medicament" name="nouveau_medicament" value="">
-                        <input type="text" class="form-control mt-2" id="medicament_libre"
-                               placeholder="Tapez le nom du médicament..." style="display:none" autocomplete="off">
                         <small class="text-muted">
-                            <i class="fas fa-info-circle"></i> Choisissez le médicament dans la liste. "Catalogue"
-                            regroupe les médicaments fréquents ; sélectionnez "Autre" pour saisir un nom libre.
+                            <i class="fas fa-info-circle"></i> Tapez le nom du médicament ou choisissez dans la liste.
+                            Les champs DCI, dosage, forme et catégorie se rempliront automatiquement si le médicament est reconnu.
                         </small>
                     </div>
 
@@ -1344,47 +1623,52 @@ $page_title = 'Mes médicaments - PharmaGeo';
                             <label class="form-label">DCI (Dénomination Commune Internationale)</label>
                             <div class="input-group-custom">
                                 <span class="input-icon"><i class="fas fa-flask"></i></span>
-                                <select class="form-control" id="nouveau_medicament_dci" name="nouveau_medicament_dci">
-                                    <option value="">-- Sélectionner (optionnel) --</option>
+                                <input type="text" class="form-control" id="nouveau_medicament_dci"
+                                       name="nouveau_medicament_dci" list="liste_dci"
+                                       placeholder="Saisissez ou sélectionnez..." autocomplete="off">
+                                <datalist id="liste_dci">
                                     <?php foreach ($liste_dci as $dci): ?>
-                                        <option value="<?php echo htmlspecialchars($dci); ?>"><?php echo htmlspecialchars($dci); ?></option>
+                                        <option value="<?php echo htmlspecialchars($dci); ?>">
                                     <?php endforeach; ?>
-                                    <option value="__autre__">Autre...</option>
-                                </select>
+                                </datalist>
                             </div>
                         </div>
                         <div class="col-md-6 form-group">
                             <label class="form-label">Dosage</label>
                             <div class="input-group-custom">
                                 <span class="input-icon"><i class="fas fa-percent"></i></span>
-                                <select class="form-control" id="nouveau_medicament_dosage" name="nouveau_medicament_dosage">
-                                    <option value="">-- Sélectionner (optionnel) --</option>
+                                <input type="text" class="form-control" id="nouveau_medicament_dosage"
+                                       name="nouveau_medicament_dosage" list="liste_dosages"
+                                       placeholder="Saisissez ou sélectionnez..." autocomplete="off">
+                                <datalist id="liste_dosages">
                                     <?php foreach ($liste_dosages as $dos): ?>
-                                        <option value="<?php echo htmlspecialchars($dos); ?>"><?php echo htmlspecialchars($dos); ?></option>
+                                        <option value="<?php echo htmlspecialchars($dos); ?>">
                                     <?php endforeach; ?>
-                                    <option value="__autre__">Autre...</option>
-                                </select>
+                                </datalist>
                             </div>
                         </div>
                         <div class="col-md-6 form-group">
                             <label class="form-label">Forme</label>
                             <div class="input-group-custom">
                                 <span class="input-icon"><i class="fas fa-pills"></i></span>
-                                <select class="form-control" id="nouveau_medicament_forme" name="nouveau_medicament_forme">
-                                    <option value="">-- Sélectionner (optionnel) --</option>
+                                <input type="text" class="form-control" id="nouveau_medicament_forme"
+                                       name="nouveau_medicament_forme" list="liste_formes"
+                                       placeholder="Saisissez ou sélectionnez..." autocomplete="off">
+                                <datalist id="liste_formes">
                                     <?php foreach ($liste_formes as $form): ?>
-                                        <option value="<?php echo htmlspecialchars($form); ?>"><?php echo htmlspecialchars($form); ?></option>
+                                        <option value="<?php echo htmlspecialchars($form); ?>">
                                     <?php endforeach; ?>
-                                    <option value="__autre__">Autre...</option>
-                                </select>
+                                </datalist>
                             </div>
                         </div>
                         <div class="col-md-6 form-group">
                             <label class="form-label">Catégorie</label>
                             <div class="input-group-custom">
                                 <span class="input-icon"><i class="fas fa-tags"></i></span>
-                                <select class="form-control" id="nouveau_medicament_categorie" name="nouveau_medicament_categorie">
-                                    <option value="">-- Sélectionner (optionnel) --</option>
+                                <input type="text" class="form-control" id="nouveau_medicament_categorie"
+                                       name="nouveau_medicament_categorie" list="liste_categories"
+                                       placeholder="Saisissez ou sélectionnez..." autocomplete="off">
+                                <datalist id="liste_categories">
                                     <?php
                                     $liste_cat_options = array_values(array_unique(array_merge(
                                         $liste_categories_ref,
@@ -1392,17 +1676,16 @@ $page_title = 'Mes médicaments - PharmaGeo';
                                     )));
                                     foreach ($liste_cat_options as $cat):
                                     ?>
-                                        <option value="<?php echo htmlspecialchars($cat); ?>"><?php echo htmlspecialchars($cat); ?></option>
+                                        <option value="<?php echo htmlspecialchars($cat); ?>">
                                     <?php endforeach; ?>
-                                    <option value="__autre__">Autre...</option>
-                                </select>
+                                </datalist>
                             </div>
                         </div>
                     </div>
                     <?php if (empty($medicaments_disponibles)): ?>
                         <small class="text-warning mt-2 d-block">
                             <i class="fas fa-info-circle"></i> Tous les médicaments en base sont déjà dans votre stock.
-                            Sélectionnez un médicament du catalogue ou "Autre" pour en créer un nouveau.
+                            Tapez le nom d'un médicament pour en créer un nouveau.
                         </small>
                     <?php endif; ?>
 
@@ -1534,7 +1817,7 @@ $page_title = 'Mes médicaments - PharmaGeo';
                         title: '⚠️ Suppression impossible',
                         text: message,
                         icon: 'warning',
-                        confirmButtonColor: '#6c757d',
+                        confirmButtonColor: '#64748B',
                         confirmButtonText: 'OK'
                     });
                     return false;
@@ -1545,8 +1828,8 @@ $page_title = 'Mes médicaments - PharmaGeo';
                     text: message + ' Cette action est irréversible.',
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonColor: '#e74c3c',
-                    cancelButtonColor: '#6c757d',
+                    confirmButtonColor: '#DC2626',
+                    cancelButtonColor: '#64748B',
                     confirmButtonText: 'Oui, supprimer',
                     cancelButtonText: 'Annuler'
                 }).then((result) => {
@@ -1557,79 +1840,168 @@ $page_title = 'Mes médicaments - PharmaGeo';
                 return false;
             };
 
-            // ===== GESTION DU CHAMP MÉDICAMENT (liste déroulante) =====
-            const medSelect = document.getElementById('medicament_select');
+            // ===== CONFIRMATION SUSPENSION / RÉACTIVATION =====
+            window.confirmSuspend = function(id, nom) {
+                event.preventDefault();
+                Swal.fire({
+                    title: '🛑 Suspendre le médicament',
+                    text: `Voulez-vous vraiment suspendre "${nom}" ? Il ne sera plus disponible pour les patients de cette pharmacie.`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#B91C1C',
+                    cancelButtonColor: '#64748B',
+                    confirmButtonText: 'Oui, suspendre',
+                    cancelButtonText: 'Annuler'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = `<?php echo BASE_URL; ?>pharmacien/medicaments.php?action=suspendre&id=${id}`;
+                    }
+                });
+                return false;
+            };
+
+            window.confirmReactivate = function(id, nom) {
+                event.preventDefault();
+                Swal.fire({
+                    title: 'Réactiver le médicament',
+                    text: `Voulez-vous réactiver "${nom}" ? Il redeviendra disponible pour les patients de cette pharmacie.`,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#166534',
+                    cancelButtonColor: '#64748B',
+                    confirmButtonText: 'Oui, réactiver',
+                    cancelButtonText: 'Annuler'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = `<?php echo BASE_URL; ?>pharmacien/medicaments.php?action=reactiver&id=${id}`;
+                    }
+                });
+                return false;
+            };
+
+            // ===== GESTION DU CHAMP MÉDICAMENT (input + datalist) =====
+            const medInput = document.getElementById('medicament_select');
             const medId = document.getElementById('id_medicament');
-            const nomMedicament = document.getElementById('nom_medicament');
-            const medicamentLibre = document.getElementById('medicament_libre');
+
+            // Mapping JS : nom -> {id, dci, dosage, forme, categorie}
+            const medicamentsData = {};
+
+            <?php foreach ($medicaments_disponibles as $med): ?>
+                medicamentsData[<?php echo json_encode($med['Nom_commercial']); ?>] = {
+                    id: <?php echo (int)$med['Id_medicament']; ?>,
+                    dci: <?php echo json_encode($med['DCI'] ?? ''); ?>,
+                    dosage: <?php echo json_encode($med['Dosage'] ?? ''); ?>,
+                    forme: <?php echo json_encode($med['Forme'] ?? ''); ?>,
+                    categorie: <?php echo json_encode($med['Categorie'] ?? ''); ?>
+                };
+            <?php endforeach; ?>
+
+            <?php foreach ($catalogue_mapping as $nom => $props): ?>
+                medicamentsData[<?php echo json_encode($nom); ?>] = {
+                    id: 0,
+                    dci: <?php echo json_encode($props[0]); ?>,
+                    dosage: <?php echo json_encode($props[1]); ?>,
+                    forme: <?php echo json_encode($props[2]); ?>,
+                    categorie: <?php echo json_encode($props[3]); ?>
+                };
+            <?php endforeach; ?>
 
             function majMedicament() {
-                if (!medSelect || !medId) return;
-                const option = medSelect.options[medSelect.selectedIndex];
-                const val = option ? option.value : '';
-                if (medicamentLibre) medicamentLibre.style.display = (val === 'autre') ? 'block' : 'none';
-                if (val === 'existant') {
-                    // Médicament déjà en base : on utilise son ID, pas de nom
-                    medId.value = option.getAttribute('data-id') || '0';
-                    if (nomMedicament) nomMedicament.value = '';
-                    if (medicamentLibre) medicamentLibre.value = '';
-                } else if (val === 'catalogue') {
-                    // Créer par nom depuis le catalogue
-                    medId.value = '0';
-                    if (nomMedicament) nomMedicament.value = option.getAttribute('data-nom') || '';
-                    if (medicamentLibre) medicamentLibre.value = '';
-                } else if (val === 'autre') {
-                    // Saisie libre
-                    medId.value = '0';
-                    if (nomMedicament) nomMedicament.value = '';
+                if (!medInput || !medId) return;
+                const nom = medInput.value.trim();
+                const data = medicamentsData[nom];
+
+                if (data) {
+                    medId.value = data.id;
+                    setChamp('nouveau_medicament_dci', data.dci);
+                    setChamp('nouveau_medicament_dosage', data.dosage);
+                    setChamp('nouveau_medicament_forme', data.forme);
+                    setChamp('nouveau_medicament_categorie', data.categorie);
                 } else {
                     medId.value = '0';
-                    if (nomMedicament) nomMedicament.value = '';
-                    if (medicamentLibre) medicamentLibre.value = '';
+                    setChamp('nouveau_medicament_dci', '');
+                    setChamp('nouveau_medicament_dosage', '');
+                    setChamp('nouveau_medicament_forme', '');
+                    setChamp('nouveau_medicament_categorie', '');
                 }
             }
 
-            if (medSelect) {
-                medSelect.addEventListener('change', majMedicament);
-            }
-            if (medicamentLibre) {
-                medicamentLibre.addEventListener('input', function() {
-                    if (nomMedicament) nomMedicament.value = this.value;
-                });
+            function setChamp(id, valeur) {
+                const el = document.getElementById(id);
+                if (el) el.value = valeur || '';
             }
 
-            // ===== GESTION DES SELECT "Autre..." (DCI, dosage, forme, catégorie) =====
-            function rendreSaisieLibre(selectId) {
-                const select = document.getElementById(selectId);
-                if (!select) return;
-                select.addEventListener('change', function() {
-                    if (this.value === '__autre__') {
-                        const wrapper = this.parentNode;
-                        const input = document.createElement('input');
-                        input.type = 'text';
-                        input.className = this.className;
-                        input.name = this.name;
-                        input.placeholder = 'Saisissez votre valeur...';
-                        input.autocomplete = 'off';
-                        input.value = '';
-                        wrapper.replaceChild(input, this);
-                        input.focus();
+            if (medInput) {
+                medInput.addEventListener('input', majMedicament);
+            }
+
+            // Entrée dans un champ de saisie = sélection, jamais envoi au stock
+            function selectionnerMedicament() {
+                if (!medInput) return;
+                let nom = medInput.value.trim();
+                if (nom === '') return;
+
+                if (medicamentsData[nom]) {
+                    majMedicament();
+                    return;
+                }
+                const proche = Object.keys(medicamentsData).find(
+                    cle => cle.toLowerCase().includes(nom.toLowerCase())
+                );
+                if (proche) {
+                    medInput.value = proche;
+                    majMedicament();
+                }
+            }
+
+            const addForm = document.querySelector('#addModal form');
+            if (addForm) {
+                addForm.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT') {
+                        e.preventDefault();
+                        if (e.target.id === 'medicament_select') {
+                            selectionnerMedicament();
+                            e.target.blur();
+                        }
+                    }
+                });
+
+                addForm.addEventListener('submit', function(e) {
+                    const champsRequis = {
+                        'medicament_select': 'le nom du médicament',
+                        'nouveau_medicament_dci': 'le DCI',
+                        'nouveau_medicament_dosage': 'le dosage',
+                        'nouveau_medicament_forme': 'la forme',
+                        'nouveau_medicament_categorie': 'la catégorie'
+                    };
+                    for (const [id, libelle] of Object.entries(champsRequis)) {
+                        const el = document.getElementById(id);
+                        if (!el || el.value.trim() === '') {
+                            e.preventDefault();
+                            if (el) el.focus();
+                            Swal.fire({
+                                title: '⚠️ Champs incomplets',
+                                text: `Veuillez renseigner ${libelle} avant d'ajouter au stock.`,
+                                icon: 'warning',
+                                confirmButtonColor: '#16A34A',
+                                confirmButtonText: 'OK'
+                            });
+                            return;
+                        }
                     }
                 });
             }
-            rendreSaisieLibre('nouveau_medicament_dci');
-            rendreSaisieLibre('nouveau_medicament_dosage');
-            rendreSaisieLibre('nouveau_medicament_forme');
-            rendreSaisieLibre('nouveau_medicament_categorie');
 
             // Réinitialiser le formulaire quand le modal se ferme/rouvre
             const addModal = document.getElementById('addModal');
             if (addModal) {
                 addModal.addEventListener('shown.bs.modal', function() {
-                    if (medSelect) medSelect.value = '';
+                    if (medInput) medInput.value = '';
                     if (medId) medId.value = '0';
-                    if (nomMedicament) nomMedicament.value = '';
-                    if (medicamentLibre) { medicamentLibre.style.display = 'none'; medicamentLibre.value = ''; }
+                    setChamp('nouveau_medicament_dci', '');
+                    setChamp('nouveau_medicament_dosage', '');
+                    setChamp('nouveau_medicament_forme', '');
+                    setChamp('nouveau_medicament_categorie', '');
                 });
             }
 
@@ -1652,7 +2024,7 @@ $page_title = 'Mes médicaments - PharmaGeo';
             });
 
             // ===== CONSOLE LOG =====
-            console.log('%c PharmaGeo - Mes médicaments ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c PharmaGeo - Mes médicaments ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
             console.log('%c Raccourci : Ctrl+N pour ajouter un médicament', 'color: #666; font-size: 13px;');
 
         });

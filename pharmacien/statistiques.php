@@ -12,6 +12,9 @@ ini_set('display_errors', 1);
 // ===== DÉFINITION DES CONSTANTES =====
 define('BASE_URL', 'http://localhost/pharmageo/');
 
+// ===== FONCTIONS UTILITAIRES =====
+require_once __DIR__ . '/../includes/fonctions.php';
+
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
     $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
@@ -279,18 +282,18 @@ $page_title = 'Statistiques - PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --light-bg: #f0f2f5;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --light-bg: #F0FDF4;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-sm: 0 2px 20px rgba(0,0,0,0.04);
             --shadow-md: 0 8px 40px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
             --shadow-xl: 0 30px 80px rgba(0,0,0,0.16);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
-            --shadow-glow-orange: 0 8px 40px rgba(200, 120, 30, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
+            --shadow-glow-orange: 0 8px 40px rgba(21,128,61, 0.20);
             --radius: 16px;
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -377,7 +380,7 @@ $page_title = 'Statistiques - PharmaGeo';
         .nav-link-custom:hover,
         .nav-link-custom.active {
             color: var(--primary-green);
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
         }
 
         .nav-link-custom::after {
@@ -399,32 +402,39 @@ $page_title = 'Statistiques - PharmaGeo';
         }
 
         .btn-nav-logout {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            background: linear-gradient(135deg, #DC2626, #B91C1C);
             color: white !important;
             padding: 8px 24px !important;
             border-radius: 50px !important;
             font-weight: 600;
             transition: var(--transition);
             border: none;
-            box-shadow: 0 4px 15px rgba(231,76,60,0.2);
+            box-shadow: 0 4px 15px rgba(220,38,38,0.2);
         }
 
         .btn-nav-logout:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(231,76,60,0.35);
+            box-shadow: 0 8px 30px rgba(220,38,38,0.35);
             color: white !important;
         }
 
         /* ===== LAYOUT / SIDEBAR ===== */
         .layout { display: flex; min-height: 100vh; }
         .sidebar-admin {
-            width: 250px; background: linear-gradient(180deg, #0c1f14, #143a1c);
+            width: 250px; background: linear-gradient(180deg, #0F2E19, #14532D);
             color: #fff; flex-shrink: 0; display: flex; flex-direction: column;
             position: fixed; top: 0; bottom: 0; left: 0; overflow-y: auto; z-index: 100;
         }
         .brand-admin { padding: 22px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; }
-        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; }
+        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center;  color: #fff;}
+        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; 
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: #fff;
+        }
+        
         .brand-admin small { color: rgba(255,255,255,0.6); display: block; }
         .nav-menu { padding: 16px 12px; flex: 1; }
         .nav-label { color: rgba(255,255,255,0.4); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; padding: 12px 12px 6px; }
@@ -436,6 +446,10 @@ $page_title = 'Statistiques - PharmaGeo';
         .user-profile .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; font-weight: 800; }
         .user-profile .name { font-size: 0.9rem; font-weight: 600; }
         .user-profile .role { font-size: 0.75rem; color: rgba(255,255,255,0.6); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
         @media (max-width: 991px) {
             .sidebar-admin { position: fixed; transform: translateX(-100%); transition: transform 0.3s ease; }
             .sidebar-admin.open { transform: translateX(0); }
@@ -533,33 +547,33 @@ $page_title = 'Statistiques - PharmaGeo';
         }
 
         .stat-card .stat-icon.green {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .stat-card .stat-icon.orange {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
         .stat-card .stat-icon.blue {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         .stat-card .stat-icon.purple {
             background: rgba(155,89,182,0.1);
-            color: #9b59b6;
+            color: #1F2937;
         }
 
         .stat-card .stat-icon.red {
-            background: rgba(231,76,60,0.1);
-            color: #e74c3c;
+            background: rgba(220,38,38,0.1);
+            color: #DC2626;
         }
 
         .stat-card .stat-icon.teal {
             background: rgba(26,188,156,0.1);
-            color: #1abc9c;
+            color: #16A34A;
         }
 
         .stat-card .stat-number {
@@ -633,14 +647,14 @@ $page_title = 'Statistiques - PharmaGeo';
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--gray-text);
-            border-bottom: 2px solid #f0f0f0;
+            border-bottom: 2px solid #F0FDF4;
             padding: 12px 10px;
         }
 
         .table-custom tbody td {
             padding: 12px 10px;
             vertical-align: middle;
-            border-bottom: 1px solid #f5f5f5;
+            border-bottom: 1px solid #F0FDF4;
             font-size: 0.9rem;
         }
 
@@ -649,7 +663,7 @@ $page_title = 'Statistiques - PharmaGeo';
         }
 
         .table-custom tbody tr:hover {
-            background: rgba(42,195,42,0.02);
+            background: rgba(22,163,74,0.02);
         }
 
         .badge-status {
@@ -660,23 +674,23 @@ $page_title = 'Statistiques - PharmaGeo';
         }
 
         .badge-status.success {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .badge-status.warning {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
         .badge-status.danger {
-            background: rgba(231,76,60,0.1);
-            color: #e74c3c;
+            background: rgba(220,38,38,0.1);
+            color: #DC2626;
         }
 
         .badge-status.info {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         /* ===== EMPTY STATE ===== */
@@ -723,7 +737,8 @@ $page_title = 'Statistiques - PharmaGeo';
             .table-custom { font-size: 0.8rem; min-width: 500px; }
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/responsive.css">
+    <link rel="stylesheet" href="../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -731,10 +746,10 @@ $page_title = 'Statistiques - PharmaGeo';
 
     <!-- ===== SIDEBAR ===== -->
     <aside class="sidebar-admin" id="sidebar">
-        <div class="brand-admin">
+        <a href="<?php echo BASE_URL; ?>index.php" class="brand-admin" style="text-decoration: none;">
             <div class="brand-icon"><i class="fas fa-hospital"></i></div>
-            <div><h4>PharmaGeo</h4><small>Pharmacien</small></div>
-        </div>
+            <div><h4>PharmaGeo</h4><small><?php echo htmlspecialchars(pharma_libelle_role('pharmacien', $user['Prenom'] ?? '')); ?></small></div>
+        </a>
         <nav class="nav-menu">
             <div class="nav-label">Navigation</div>
             <a href="<?php echo BASE_URL; ?>pharmacien/dashboard.php" class="nav-item"><i class="fas fa-tachometer-alt"></i><span>Tableau de bord</span></a>
@@ -746,15 +761,17 @@ $page_title = 'Statistiques - PharmaGeo';
             <a href="<?php echo BASE_URL; ?>pharmacien/statistiques.php" class="nav-item active"><i class="fas fa-chart-bar"></i><span>Statistiques</span></a>
             <a href="<?php echo BASE_URL; ?>pharmacien/profil.php" class="nav-item"><i class="fas fa-user"></i><span>Profil</span></a>
             <div class="nav-label" style="margin-top: 20px;">Système</div>
-            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
+            <?php require_once __DIR__ . '/../includes/reinitialiser.php'; echo html_bloc_reinitialiser(); ?>
+            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.15); margin-bottom: 12px;"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
         </nav>
-        <div class="user-profile">
-            <div class="avatar"><?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?></div>
+        <a class="user-profile" href="<?php echo BASE_URL; ?>pharmacien/profil.php" title="Voir mon profil">
+            <div class="avatar"><?php if (!empty($_SESSION['photo']) && function_exists('pharma_image_disponible') && pharma_image_disponible($_SESSION['photo'])): ?><img src="<?php echo htmlspecialchars(pharma_image_url($_SESSION['photo'])); ?>" alt=""><?php else: ?><?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?><?php endif; ?></div>
             <div>
                 <div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div>
-                <div class="role"><i class="fas fa-user-md me-1" style="color:#f1c40f;"></i> Pharmacien</div>
+                <div class="role"><i class="fas fa-user-md me-1" style="color:#DC2626;"></i> <?php echo htmlspecialchars(pharma_libelle_role('pharmacien', $user['Prenom'] ?? '')); ?></div>
             </div>
-        </div>
+            <i class="fas fa-chevron-right profile-chevron"></i>
+        </a>
     </aside>
 
     <!-- ===== MAIN CONTENT ===== -->
@@ -865,7 +882,7 @@ $page_title = 'Statistiques - PharmaGeo';
                         </div>
                         <div class="col-4">
                             <div class="small text-muted">Rupture</div>
-                            <div class="fw-bold" style="color: #e74c3c;"><?php echo $statut_stocks['rupture']; ?></div>
+                            <div class="fw-bold" style="color: #DC2626;"><?php echo $statut_stocks['rupture']; ?></div>
                         </div>
                     </div>
                 </div>
@@ -1031,24 +1048,24 @@ $page_title = 'Statistiques - PharmaGeo';
                         {
                             label: 'Total',
                             data: resData.map(item => parseInt(item.total || 0)),
-                            backgroundColor: 'rgba(52,152,219,0.6)',
-                            borderColor: '#3498db',
+                            backgroundColor: 'rgba(22,83,52,0.6)',
+                            borderColor: '#166534',
                             borderWidth: 2,
                             borderRadius: 4
                         },
                         {
                             label: 'Confirmées',
                             data: resData.map(item => parseInt(item.confirmees || 0)),
-                            backgroundColor: 'rgba(42,195,42,0.6)',
-                            borderColor: 'rgb(42, 195, 42)',
+                            backgroundColor: 'rgba(22,163,74,0.6)',
+                            borderColor: '#16A34A',
                             borderWidth: 2,
                             borderRadius: 4
                         },
                         {
                             label: 'Refusées',
                             data: resData.map(item => parseInt(item.refusees || 0)),
-                            backgroundColor: 'rgba(231,76,60,0.6)',
-                            borderColor: '#e74c3c',
+                            backgroundColor: 'rgba(220,38,38,0.6)',
+                            borderColor: '#DC2626',
                             borderWidth: 2,
                             borderRadius: 4
                         }
@@ -1094,9 +1111,9 @@ $page_title = 'Statistiques - PharmaGeo';
                     datasets: [{
                         data: [disponibles, stockFaible, rupture],
                         backgroundColor: [
-                            'rgb(42, 195, 42)',
-                            'hsl(25, 75%, 47%)',
-                            '#e74c3c'
+                            '#16A34A',
+                            '#166534',
+                            '#DC2626'
                         ],
                         borderWidth: 3,
                         borderColor: '#ffffff'
@@ -1166,7 +1183,7 @@ $page_title = 'Statistiques - PharmaGeo';
             });
 
             // ===== CONSOLE LOG =====
-            console.log('%c PharmaGeo - Statistiques ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c PharmaGeo - Statistiques ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
 
         });
     </script>

@@ -83,7 +83,7 @@ if ($token !== '' && $success === '' && $error === '') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $page_title; ?></title>
     <meta name="robots" content="noindex, nofollow">
-    <meta name="theme-color" content="#2ac32a">
+    <meta name="theme-color" content="#16A34A">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -98,16 +98,16 @@ if ($token !== '' && $success === '' && $error === '') {
     <style>
         /* ===== VARIABLES & BASE ===== */
         :root {
-            --primary-green: #2ac32a;
-            --primary-green-dark: #1e8e1e;
-            --primary-orange: #d4880f;
-            --primary-orange-dark: #b3740d;
-            --dark-text: #0a1628;
+            --primary-green: #16A34A;
+            --primary-green-dark: #166534;
+            --primary-orange: #B91C1C;
+            --primary-orange-dark: #B91C1C;
+            --dark-text: #0F2E19;
             --gray-text: #64748b;
             --radius: 20px;
             --radius-sm: 12px;
             --shadow-lg: 0 20px 60px rgba(10,22,40,0.12);
-            --shadow-glow: 0 10px 34px rgba(42,195,42,0.28);
+            --shadow-glow: 0 10px 34px rgba(22,163,74,0.28);
             --ease: cubic-bezier(0.23,1,0.32,1);
         }
 
@@ -127,7 +127,7 @@ if ($token !== '' && $success === '' && $error === '') {
         }
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #f4f7f6;
+            background: #F0FDF4;
             overflow-x: hidden;
         }
 
@@ -193,7 +193,7 @@ if ($token !== '' && $success === '' && $error === '') {
             content: '';
             position: absolute;
             inset: 0;
-            background: linear-gradient(160deg, rgba(6,14,26,0.92) 0%, rgba(10,30,20,0.80) 45%, rgba(42,195,42,0.55) 100%);
+            background: linear-gradient(160deg, rgba(6,14,26,0.92) 0%, rgba(10,30,20,0.80) 45%, rgba(22,163,74,0.55) 100%);
             z-index: -1;
         }
         .auth-visual::after {
@@ -223,12 +223,19 @@ if ($token !== '' && $success === '' && $error === '') {
             justify-content: center;
             font-size: 1.4rem;
             box-shadow: var(--shadow-glow);
-        }
+         color: #fff;}
         .auth-brand span {
             font-size: 1.4rem;
             font-weight: 800;
             letter-spacing: -0.5px;
+        
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: var(--primary-green);
         }
+        
 
         .auth-visual-content {
             max-width: 460px;
@@ -318,7 +325,7 @@ if ($token !== '' && $success === '' && $error === '') {
             align-items: center;
             justify-content: center;
             padding: 40px 24px;
-            background: #f4f7f6;
+            background: #F0FDF4;
             position: relative;
         }
         .auth-card {
@@ -352,7 +359,14 @@ if ($token !== '' && $success === '' && $error === '') {
             font-weight: 800;
             font-size: 1.2rem;
             color: var(--dark-text);
+        
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: var(--primary-green);
         }
+        
 
         .auth-card-header {
             text-align: center;
@@ -381,13 +395,13 @@ if ($token !== '' && $success === '' && $error === '') {
         .alert-shake {
             animation: shake 0.5s var(--ease);
             border: none;
-            border-left: 4px solid #dc3545;
+            border-left: 4px solid #DC2626;
             border-radius: var(--radius-sm);
             font-size: 0.92rem;
         }
         .alert-reset-success {
             border: none;
-            border-left: 4px solid #2ac32a;
+            border-left: 4px solid #16A34A;
             border-radius: var(--radius-sm);
             font-size: 0.92rem;
         }
@@ -404,19 +418,19 @@ if ($token !== '' && $success === '' && $error === '') {
             transition: box-shadow 0.35s var(--ease), transform 0.35s var(--ease);
         }
         .form-modern .input-group:focus-within {
-            box-shadow: 0 0 0 4px rgba(42,195,42,0.15);
+            box-shadow: 0 0 0 4px rgba(22,163,74,0.15);
             transform: translateY(-1px);
         }
         .form-modern .input-group-text {
-            background: #f4f7f6;
-            border: 1.5px solid #e6ebe9;
+            background: #F0FDF4;
+            border: 1.5px solid #D9E9DF;
             border-right: none;
             color: var(--gray-text);
             width: 46px;
             justify-content: center;
         }
         .form-modern .form-control {
-            border: 1.5px solid #e6ebe9;
+            border: 1.5px solid #D9E9DF;
             border-left: none;
             padding: 12px 14px;
             font-size: 0.96rem;
@@ -424,7 +438,7 @@ if ($token !== '' && $success === '' && $error === '') {
         .form-modern .toggle-password-group .form-control { border-right: none; }
         .form-modern .toggle-password {
             background: #fff;
-            border: 1.5px solid #e6ebe9;
+            border: 1.5px solid #D9E9DF;
             border-left: none;
             color: var(--gray-text);
             cursor: pointer;
@@ -460,7 +474,7 @@ if ($token !== '' && $success === '' && $error === '') {
 
         .btn-login-outline {
             background: #fff;
-            border: 1.5px solid #e6ebe9;
+            border: 1.5px solid #D9E9DF;
             color: var(--dark-text);
             font-weight: 600;
             border-radius: var(--radius-sm);
@@ -506,7 +520,8 @@ if ($token !== '' && $success === '' && $error === '') {
             .auth-card { padding: 32px 24px; border-radius: 16px; }
         }
     </style>
-    <link rel="stylesheet" href="assets/css/responsive.css">
+    <link rel="stylesheet" href="assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
     <div class="auth-shell">
@@ -518,10 +533,10 @@ if ($token !== '' && $success === '' && $error === '') {
             <div class="bg-slide"></div>
             <div class="bg-slide"></div>
 
-            <div class="auth-brand">
+            <a href="<?php echo BASE_URL; ?>index.php" class="auth-brand" style="text-decoration: none;">
                 <div class="logo-badge"><i class="fas fa-hospital"></i></div>
                 <span>PharmaGeo</span>
-            </div>
+            </a>
 
             <div class="auth-visual-content">
                 <h1>Votre santé, connectée en un instant</h1>
@@ -543,10 +558,10 @@ if ($token !== '' && $success === '' && $error === '') {
         ============================================================ -->
         <div class="auth-form-panel">
             <div class="auth-card">
-                <div class="auth-card-mobile-brand">
+                <a href="<?php echo BASE_URL; ?>index.php" class="auth-card-mobile-brand" style="text-decoration: none;">
                     <div class="logo-badge"><i class="fas fa-hospital"></i></div>
                     <span>PharmaGeo</span>
-                </div>
+                </a>
 
                 <div class="auth-card-header">
                     <i class="fas fa-lock d-none d-lg-inline-block"></i>

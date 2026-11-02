@@ -45,11 +45,12 @@ try {
                    AND EXISTS (SELECT 1 FROM pharmacie p WHERE p.Id_pharmacie = s.Id_pharmacie AND p.Statut = 'active')
                 ) as disponible
             FROM medicament m
-            WHERE m.Nom_commercial LIKE :terme
+            WHERE (m.Nom_commercial LIKE :terme
                OR m.DCI LIKE :terme
                OR m.Id_medicament IN (
                    SELECT Id_medicament FROM medicament_synonyme WHERE Libelle LIKE :terme
-               )
+               ))
+            AND m.Statut = 'actif'
             ORDER BY m.Nom_commercial ASC
             LIMIT 10";
 

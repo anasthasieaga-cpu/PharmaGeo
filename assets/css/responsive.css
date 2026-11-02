@@ -75,6 +75,65 @@ input, select, textarea, button { font-family: inherit; }
     overflow-y: auto;
 }
 
+/* Menus de la barre horizontale (profil, notifications) : ils doivent
+   rester visibles au-dessus du contenu de la page. */
+.navbar .dropdown-menu {
+    z-index: 1050;
+}
+
+/* ===== MENU DU COMPTE (balise select) DANS LA BARRE VERTE =====
+   Le select reprend le dégradé vert-orange de la barre de
+   navigation. La flèche est dessinée en blanc pour rester visible
+   sur ce fond. La liste d'options, elle, reste celle du système :
+   les navigateurs ne permettent pas de la mettre en forme. */
+.navbar-select {
+    background-color: #16A34A;
+    background-image:
+        linear-gradient(135deg, #16A34A, #166534),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23ffffff' d='M8 11.5 2.5 6l1.1-1.1L8 9.3l4.4-4.4L13.5 6z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat, no-repeat;
+    background-position: 0 0, right 0.85rem center;
+    background-size: 100% 100%, 0.7rem;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 50px;
+    padding: 0.35rem 2.1rem 0.35rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    /* Le texte blanc ressort sur le vert vif grâce à cette ombre. */
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    max-width: 190px;
+    cursor: pointer;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+}
+
+/* Liste d'options : fond clair et texte foncé pour rester lisible,
+   la couleur de fond du navigateur n'étant pas contrôlable. */
+.navbar-select option {
+    background-color: #ffffff;
+    color: #1F2937;
+    font-weight: 500;
+}
+
+.navbar-select:focus {
+    outline: 2px solid #fff;
+    outline-offset: 1px;
+    box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.35);
+}
+
+.navbar-select-icone {
+    color: #fff;
+}
+
+@media (max-width: 576px) {
+    .navbar-select {
+        max-width: 130px;
+        font-size: 0.8rem;
+    }
+}
+
 /* ============================================================
    HERO (page d'accueil)
    ============================================================ */
@@ -135,13 +194,13 @@ input, select, textarea, button { font-family: inherit; }
     height: 54px;
     border-radius: 50%;
     border: none;
-    background: linear-gradient(135deg, #2ac32a, #d4880f);
+    background: linear-gradient(135deg, #16A34A, #B91C1C);
     color: #ffffff;
     font-size: 1.3rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 10px 34px rgba(42, 195, 42, 0.4);
+    box-shadow: 0 10px 34px rgba(22,163,74, 0.4);
     cursor: pointer;
     transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
@@ -235,7 +294,7 @@ input, select, textarea, button { font-family: inherit; }
 }
 .table-responsive::-webkit-scrollbar { height: 6px; }
 .table-responsive::-webkit-scrollbar-thumb {
-    background: rgba(42, 195, 42, 0.5);
+    background: rgba(22,163,74, 0.5);
     border-radius: 4px;
 }
 
@@ -360,6 +419,22 @@ footer .container, .footer-custom .container { padding-left: 16px; padding-right
     .hero-section { min-height: 100vh; padding-top: 110px; }
     .hero-search { flex-wrap: nowrap; }
     .back-to-top { display: none !important; }
+}
+
+/* ============================================================
+   AVATAR AVEC PHOTO DE PROFIL
+   Espace administrateur et espace pharmacien : l'image occupe
+   toute la pastille, les initiales restent le repli.
+   ============================================================ */
+.user-profile .avatar {
+    overflow: hidden;
+}
+
+.user-profile .avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }
 
 /* ============================================================

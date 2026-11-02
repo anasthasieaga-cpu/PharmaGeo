@@ -4,26 +4,16 @@
 // Affiche la carte Leaflet avec les pharmacies, filtres et géolocalisation.
 // ============================================================
 
-// ===== ACTIVATION DES ERREURS =====
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+// ===== GÉOLOCALISATION DE LA PERSONNE =====
+// La carte est centrée sur l'endroit où la personne se trouve réellement
+// et les distances de la liste latérale en sont calculées (voir includes/geo.php).
+$geo_reload = true;
 
-// ===== DÉFINITION DES CONSTANTES =====
-define('BASE_URL', 'http://localhost/pharmageo/');
+require_once '../../includes/config.php';
+require_once '../../includes/session.php';
+require_once '../../includes/geo.php';
 
-// ===== CONNEXION À LA BASE DE DONNÉES =====
-try {
-    $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-} catch(PDOException $e) {
-    die("Erreur de connexion à la base de données : " . $e->getMessage());
-}
-
-// ===== GESTION DES SESSIONS =====
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+$position = getPositionUtilisateur($pdo);
 
 // ===== ACCÈS PUBLIC =====
 // La carte des pharmacies est accessible sans compte : un visiteur peut
@@ -48,7 +38,7 @@ try {
         SELECT DISTINCT m.Id_medicament, m.Nom_commercial, m.DCI
         FROM medicament m
         JOIN stock s ON m.Id_medicament = s.Id_medicament
-        WHERE s.Quantite > 0 AND s.Statut = 'disponible'
+        WHERE m.Statut = 'actif' AND s.Quantite > 0 AND s.Statut = 'disponible'
         ORDER BY m.Nom_commercial ASC
         LIMIT 50
     ")->fetchAll();
@@ -65,9 +55,16 @@ try {
     $categories = [];
 }
 
-// ===== COORDONNÉES PAR DÉFAUT (Porto-Novo) =====
-$default_lat = 6.4970;
-$default_lng = 2.6050;
+// ===== POINT DE CENTRAGE DE LA CARTE =====
+// Point de vue initial : la position connue de la personne si elle existe,
+// sinon le centre de Porto-Novo.
+$default_lat = $position['lat'];
+$default_lng = $position['lng'];
+
+// Une distance n'est publiée que si la position est réellement exploitable
+// (GPS frais et assez précis). Sinon la carte reste centrée sur Porto-Novo
+// et aucune distance n'est affichée.
+$geo_precise = geoPositionEstPrecise($position);
 
 // ===== STATISTIQUES =====
 $total_pharmacies = count($pharmacies);
@@ -104,17 +101,17 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --light-bg: #f0f2f5;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --light-bg: #F0FDF4;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-sm: 0 2px 20px rgba(0,0,0,0.04);
             --shadow-md: 0 8px 40px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
-            --shadow-glow-orange: 0 8px 40px rgba(200, 120, 30, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
+            --shadow-glow-orange: 0 8px 40px rgba(21,128,61, 0.20);
             --radius: 16px;
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -206,7 +203,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
         .nav-link-custom:hover,
         .nav-link-custom.active {
             color: var(--primary-green);
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
         }
 
         .nav-link-custom::after {
@@ -228,32 +225,39 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
         }
 
         .btn-nav-logout {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            background: linear-gradient(135deg, #DC2626, #B91C1C);
             color: white !important;
             padding: 8px 24px !important;
             border-radius: 50px !important;
             font-weight: 600;
             transition: var(--transition);
             border: none;
-            box-shadow: 0 4px 15px rgba(231,76,60,0.2);
+            box-shadow: 0 4px 15px rgba(220,38,38,0.2);
         }
 
         .btn-nav-logout:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(231,76,60,0.35);
+            box-shadow: 0 8px 30px rgba(220,38,38,0.35);
             color: white !important;
         }
 
         /* ===== LAYOUT / SIDEBAR ===== */
         .layout { display: flex; min-height: 100vh; }
         .sidebar-admin {
-            width: 250px; background: linear-gradient(180deg, #0c1f14, #143a1c);
+            width: 250px; background: linear-gradient(180deg, #0F2E19, #14532D);
             color: #fff; flex-shrink: 0; display: flex; flex-direction: column;
             position: fixed; top: 0; bottom: 0; left: 0; overflow-y: auto; z-index: 100;
         }
         .brand-admin { padding: 22px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; }
-        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; }
+        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center;  color: #fff;}
+        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; 
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: #fff;
+        }
+        
         .brand-admin small { color: rgba(255,255,255,0.6); display: block; }
         .nav-menu { padding: 16px 12px; flex: 1; }
         .nav-label { color: rgba(255,255,255,0.4); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; padding: 12px 12px 6px; }
@@ -266,6 +270,10 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
         .user-profile .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; font-weight: 800; }
         .user-profile .name { font-size: 0.9rem; font-weight: 600; }
         .user-profile .role { font-size: 0.75rem; color: rgba(255,255,255,0.6); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
         @media (max-width: 991px) {
             .sidebar-admin { position: fixed; transform: translateX(-100%); transition: transform 0.3s ease; }
             .sidebar-admin.open { transform: translateX(0); }
@@ -337,7 +345,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
 
         .top-bar .page-actions .btn-action.btn-primary-custom:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 40px rgba(42,195,42,0.35);
+            box-shadow: 0 12px 40px rgba(22,163,74,0.35);
         }
 
         .top-bar .page-actions .btn-action.btn-outline-custom {
@@ -417,7 +425,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
         .filters-section .filter-group .filter-btn {
             padding: 6px 16px;
             border-radius: 50px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid #D9E9DF;
             background: transparent;
             font-weight: 500;
             font-size: 0.8rem;
@@ -459,7 +467,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
             border-radius: 50px;
             padding: 4px 4px 4px 16px;
             box-shadow: var(--shadow-sm);
-            border: 2px solid #e0e0e0;
+            border: 2px solid #D9E9DF;
             transition: var(--transition);
             flex: 1;
             min-width: 200px;
@@ -468,7 +476,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
 
         .search-box-map:focus-within {
             border-color: var(--primary-green);
-            box-shadow: 0 0 0 4px rgba(42,195,42,0.1);
+            box-shadow: 0 0 0 4px rgba(22,163,74,0.1);
         }
 
         .search-box-map .form-control {
@@ -517,7 +525,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
 
         .pharmacy-list-item {
             padding: 12px 16px;
-            border-bottom: 1px solid #f5f5f5;
+            border-bottom: 1px solid #F0FDF4;
             cursor: pointer;
             transition: var(--transition);
             display: flex;
@@ -526,7 +534,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
         }
 
         .pharmacy-list-item:hover {
-            background: rgba(42,195,42,0.04);
+            background: rgba(22,163,74,0.04);
         }
 
         .pharmacy-list-item:last-child {
@@ -537,7 +545,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
             width: 40px;
             height: 40px;
             border-radius: 12px;
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -572,7 +580,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
         }
 
         .pharmacy-list-item.active {
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
             border-left: 3px solid var(--primary-green);
         }
 
@@ -699,7 +707,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
 
         /* ===== MARKER CLUSTER ===== */
         .marker-cluster {
-            background: rgba(42,195,42,0.2);
+            background: rgba(22,163,74,0.2);
             border: 2px solid var(--primary-green);
             border-radius: 50%;
             width: 40px;
@@ -732,7 +740,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
         .map-loading .spinner {
             width: 24px;
             height: 24px;
-            border: 3px solid #e0e0e0;
+            border: 3px solid #D9E9DF;
             border-top-color: var(--primary-green);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
@@ -743,6 +751,8 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
         }
     </style>
     <link rel="stylesheet" href="../../assets/css/responsive.css">
+    <?php require_once '../../includes/geo_style.php'; ?>    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -750,12 +760,13 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
 
     <!-- ===== SIDEBAR ===== -->
     <aside class="sidebar-admin" id="sidebar">
-        <div class="brand-admin">
+        <a href="<?php echo BASE_URL; ?>index.php" class="brand-admin" style="text-decoration: none;">
             <div class="brand-icon"><i class="fas fa-hospital"></i></div>
             <div><h4>PharmaGeo</h4><small>Patient</small></div>
-        </div>
+        </a>
         <nav class="nav-menu">
             <div class="nav-label">Navigation</div>
+            <a href="<?php echo BASE_URL; ?>index.php" class="nav-item"><i class="fas fa-home"></i><span>Accueil</span></a>
             <a href="<?php echo BASE_URL; ?>pages/patient/recherche.php" class="nav-item"><i class="fas fa-search"></i><span>Rechercher</span></a>
             <a href="<?php echo BASE_URL; ?>pages/patient/carte.php" class="nav-item active"><i class="fas fa-map-marker-alt"></i><span>Carte</span></a>
             <?php if ($est_connecte): ?>
@@ -763,20 +774,31 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
                 <a href="<?php echo BASE_URL; ?>pages/patient/historique.php" class="nav-item"><i class="fas fa-history"></i><span>Historique</span></a>
                 <a href="<?php echo BASE_URL; ?>pages/patient/profil.php" class="nav-item"><i class="fas fa-user"></i><span>Profil</span></a>
                 <div class="nav-label" style="margin-top: 20px;">Système</div>
-                <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
+                <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.15); margin-bottom: 12px;"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
             <?php else: ?>
                 <div class="nav-label" style="margin-top: 20px;">Système</div>
                 <a href="<?php echo BASE_URL; ?>inscription.php" class="nav-item"><i class="fas fa-user-plus"></i><span>S'inscrire</span></a>
                 <a href="<?php echo BASE_URL; ?>connexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);"><i class="fas fa-sign-in-alt"></i><span>Se connecter</span></a>
             <?php endif; ?>
         </nav>
-        <div class="user-profile">
-            <div class="avatar"><?php echo strtoupper(substr(($_SESSION['prenom'] ?? 'A'), 0, 1) . substr(($_SESSION['nom'] ?? 'D'), 0, 1)); ?></div>
-            <div>
-                <div class="name"><?php echo htmlspecialchars(($est_connecte ? (($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')) : 'Visiteur')); ?></div>
-                <div class="role"><i class="fas fa-user me-1" style="color:#f1c40f;"></i> <?php echo $est_connecte ? 'Patient' : 'Invité'; ?></div>
+<?php if ($est_connecte): ?>
+            <a class="user-profile" href="<?php echo BASE_URL . lienProfil(); ?>" title="Voir mon profil">
+                <div class="avatar"><?php echo strtoupper(substr(($_SESSION['prenom'] ?? 'A'), 0, 1) . substr(($_SESSION['nom'] ?? 'D'), 0, 1)); ?></div>
+                <div>
+                    <div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div>
+                    <div class="role"><i class="fas fa-user me-1" style="color:#DC2626;"></i> Patient</div>
+                </div>
+                <i class="fas fa-chevron-right profile-chevron"></i>
+            </a>
+        <?php else: ?>
+            <div class="user-profile">
+                <div class="avatar"><?php echo strtoupper(substr(($_SESSION['prenom'] ?? 'A'), 0, 1) . substr(($_SESSION['nom'] ?? 'D'), 0, 1)); ?></div>
+                <div>
+                    <div class="name"><?php echo htmlspecialchars(($est_connecte ? (($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')) : 'Visiteur')); ?></div>
+                    <div class="role"><i class="fas fa-user me-1" style="color:#DC2626;"></i> <?php echo $est_connecte ? 'Patient' : 'Invité'; ?></div>
+                </div>
             </div>
-        </div>
+        <?php endif; ?>
     </aside>
 
     <!-- ===== MAIN CONTENT ===== -->
@@ -802,11 +824,17 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
                         <span><span class="number"><?php echo $pharmacies_avec_stock; ?></span> avec stock</span>
                     </div>
                 </div>
+                <a href="<?php echo BASE_URL; ?>index.php" class="btn-action btn-outline-custom">
+                    <i class="fas fa-home"></i> Accueil
+                </a>
                 <a href="<?php echo BASE_URL; ?>pages/patient/recherche.php" class="btn-action btn-primary-custom">
                     <i class="fas fa-search"></i> Rechercher
                 </a>
             </div>
         </div>
+
+        <?php echo geoAfficherPosition($position); ?>
+        <?php echo geoBandeauPosition($position); ?>
 
         <!-- ===== FILTRES ===== -->
         <div class="filters-section animate-fade-up delay-1">
@@ -864,11 +892,40 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
             <div class="col-lg-4">
                 <div class="pharmacy-list-sidebar" id="pharmacyList">
                     <?php if (!empty($pharmacies)): ?>
-                        <?php foreach ($pharmacies as $index => $p): ?>
+                        <?php
+                        // Distance de chaque pharmacie depuis la position connue
+                        // de la personne, calculée côté serveur. Elle est
+                        // réinjectée dans data-distance pour que le tri et
+                        // l'affichage soient corrects même sans JavaScript.
+                        // Sans position GPS exploitable, la distance vaut null :
+                        // les pharmacies sont alors classées par nom et aucune
+                        // distance n'est publiée.
+                        $pharmacies_triees = [];
+                        foreach ($pharmacies as $p) {
+                            $p['distance_metres'] = geoDistanceAffichee(
+                                $position,
+                                $p['Latitude'],
+                                $p['Longitude']
+                            );
+                            $pharmacies_triees[] = $p;
+                        }
+                        if ($geo_precise) {
+                            usort($pharmacies_triees, function ($a, $b) {
+                                return $a['distance_metres'] <=> $b['distance_metres'];
+                            });
+                        } else {
+                            usort($pharmacies_triees, function ($a, $b) {
+                                return strcmp($a['Nom'], $b['Nom']);
+                            });
+                        }
+                        ?>
+                        <?php foreach ($pharmacies_triees as $index => $p): ?>
+                            <?php $distance_affichee = geoFormaterDistance($p['distance_metres']); ?>
                             <div class="pharmacy-list-item <?php echo $index === 0 ? 'active' : ''; ?>" 
                                  data-id="<?php echo $p['Id_pharmacie']; ?>"
                                  data-lat="<?php echo $p['Latitude']; ?>"
-                                 data-lng="<?php echo $p['Longitude']; ?>">
+                                 data-lng="<?php echo $p['Longitude']; ?>"
+                                 data-distance="<?php echo $p['distance_metres'] !== null ? round($p['distance_metres'], 1) : ''; ?>">
                                 <div class="pharmacy-icon">
                                     <i class="fas fa-store"></i>
                                 </div>
@@ -885,8 +942,14 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
                                     </div>
                                 </div>
                                 <div class="pharmacy-distance">
-                                    <i class="fas fa-route"></i>
-                                    <span class="distance-value">---</span>
+                                    <i class="fas <?php echo $distance_affichee !== null ? 'fa-route' : 'fa-location-arrow'; ?>"></i>
+                                    <?php if ($distance_affichee !== null): ?>
+                                        <span class="distance-value" title="Distance à vol d'oiseau (ligne droite, non routière)"><?php echo $distance_affichee; ?></span>
+                                    <?php else: ?>
+                                        <span class="distance-value" title="Activez la localisation pour connaître la distance">
+                                            —&nbsp;act.?
+                                        </span>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         <?php endforeach; ?>
@@ -929,6 +992,8 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
             const BASE_URL = <?php echo json_encode(BASE_URL); ?>;
 
             // ===== INITIALISATION DE LA CARTE =====
+            // Point de vue initial : position connue de la personne, ou
+            // centre de Porto-Novo en dernier ressort.
             const map = L.map('map', {
                 center: [defaultLat, defaultLng],
                 zoom: 13,
@@ -954,7 +1019,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
             // Icône personnalisée pour les pharmacies
             const pharmacyIcon = L.divIcon({
                 className: 'pharmacy-marker',
-                html: '<div style="background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 16px; box-shadow: 0 4px 20px rgba(42,195,42,0.3); border: 2px solid white;"><i class="fas fa-store"></i></div>',
+                html: '<div style="background: linear-gradient(135deg, #16A34A, #166534); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 16px; box-shadow: 0 4px 20px rgba(22,163,74,0.3); border: 2px solid white;"><i class="fas fa-store"></i></div>',
                 iconSize: [36, 36],
                 iconAnchor: [18, 18],
                 popupAnchor: [0, -18]
@@ -962,7 +1027,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
 
             const pharmacyIconSelected = L.divIcon({
                 className: 'pharmacy-marker-selected',
-                html: '<div style="background: linear-gradient(135deg, hsl(25, 75%, 47%), rgb(42, 195, 42)); width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px; box-shadow: 0 4px 30px rgba(200,120,30,0.4); border: 3px solid white; animation: pulse 2s infinite;"><i class="fas fa-store"></i></div>',
+                html: '<div style="background: linear-gradient(135deg, #166534, #16A34A); width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px; box-shadow: 0 4px 30px rgba(21,128,61,0.4); border: 3px solid white; animation: pulse 2s infinite;"><i class="fas fa-store"></i></div>',
                 iconSize: [44, 44],
                 iconAnchor: [22, 22],
                 popupAnchor: [0, -22]
@@ -971,7 +1036,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
             // Icône utilisateur
             const userIcon = L.divIcon({
                 className: 'user-marker',
-                html: '<div style="background: #3498db; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 16px; box-shadow: 0 4px 20px rgba(52,152,219,0.4); border: 2px solid white;"><i class="fas fa-user"></i></div>',
+                html: '<div style="background: #166534; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 16px; box-shadow: 0 4px 20px rgba(22,83,52,0.4); border: 2px solid white;"><i class="fas fa-user"></i></div>',
                 iconSize: [32, 32],
                 iconAnchor: [16, 16]
             });
@@ -998,7 +1063,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
 
                     const popupContent = `
                         <div class="pharmacy-popup">
-                            <div class="name"><i class="fas fa-store" style="color: rgb(42, 195, 42);"></i> ${pharmacy.Nom}</div>
+                            <div class="name"><i class="fas fa-store" style="color: #16A34A;"></i> ${pharmacy.Nom}</div>
                             <div class="address">
                                 <i class="fas fa-map-marker-alt"></i> ${pharmacy.Quartier || ''}, ${pharmacy.Commune || 'Porto-Novo'}
                             </div>
@@ -1009,10 +1074,10 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
                                 <div><i class="fas fa-user"></i> ${pharmacy.Pharmacien_Prenom || ''} ${pharmacy.Pharmacien_Nom || ''}</div>
                             </div>
                             <div class="d-flex gap-2 mt-2 flex-wrap">
-                                <a href="${BASE_URL}pages/patient/recherche.php?pharmacie=${pharmacy.Id_pharmacie}" class="btn-popup">
+                                <a href="${BASE_URL}pages/patient/pharmacie.php?id=${pharmacy.Id_pharmacie}" class="btn-popup">
                                     <i class="fas fa-search"></i> Voir les médicaments
                                 </a>
-                                <a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank" class="btn-popup" style="background: #3498db;">
+                                <a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank" class="btn-popup" style="background: #166534;">
                                     <i class="fas fa-directions"></i> Itinéraire
                                 </a>
                             </div>
@@ -1047,93 +1112,146 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
             addPharmaciesToMap(pharmaciesData);
 
             // ===== GÉOLOCALISATION =====
+            function afficherPositionUtilisateur(lat, lng, precision) {
+                // Supprimer l'ancienne position
+                if (userMarker) {
+                    map.removeLayer(userMarker);
+                }
+                if (userCircle) {
+                    map.removeLayer(userCircle);
+                }
+
+                // Ajouter le marqueur utilisateur
+                userMarker = L.marker([lat, lng], { icon: userIcon })
+                    .bindPopup('📍 Votre position')
+                    .addTo(map);
+
+                // Cercle de précision
+                userCircle = L.circle([lat, lng], {
+                    radius: (typeof precision === 'number' && precision > 0) ? precision : 100,
+                    color: '#166534',
+                    fillColor: '#166534',
+                    fillOpacity: 0.1,
+                    weight: 2
+                }).addTo(map);
+            }
+
+            // La position réellement connue (session précédente) ne sert au
+            // marqueur QUE si des coordonnées réelles ont été obtenues. On ne
+            // place jamais le marqueur « Votre position » sur le centre par
+            // défaut : cela ferait croire à une position GPS inventée.
+            function afficherPositionConnue() {
+                const geo = window.PHARMA_GEO;
+                if (!geo || geo.precise !== true) { return; }
+
+                const lat = parseFloat(geo.lat);
+                const lng = parseFloat(geo.lng);
+                if (isNaN(lat) || isNaN(lng)) { return; }
+
+                afficherPositionUtilisateur(lat, lng, geo.precision);
+            }
+
+            // Une position fraîchement fournie par le navigateur alimente
+            // toujours le calcul : une mesure peu précise (Wi-Fi) reste bien
+            // plus utile qu'un « distance inconnue ».
+            function appliquerPosition(lat, lng, accuracy) {
+                afficherPositionUtilisateur(lat, lng, accuracy);
+                calculateDistances(lat, lng);
+                map.setView([lat, lng], 14);
+            }
+
             function getUserLocation() {
-                if (navigator.geolocation) {
+                if (!navigator.geolocation) {
+                    // Pas de géolocalisation navigateur : on se contente de
+                    // la position déjà connue, sans rien inventer.
+                    afficherPositionConnue();
+                    return;
+                }
+
+                // Haute précision d'abord (GPS matériel) ; en cas d'échec ou
+                // d'expiration (fréquent sur ordinateur) on retente en
+                // précision normale (position réseau), largement suffisante.
+                const demander = function (options) {
                     navigator.geolocation.getCurrentPosition(
                         function(position) {
                             const lat = position.coords.latitude;
                             const lng = position.coords.longitude;
-
-                            // Supprimer l'ancien marqueur
-                            if (userMarker) {
-                                map.removeLayer(userMarker);
-                            }
-                            if (userCircle) {
-                                map.removeLayer(userCircle);
-                            }
-
-                            // Ajouter le marqueur utilisateur
-                            userMarker = L.marker([lat, lng], { icon: userIcon })
-                                .bindPopup('📍 Votre position')
-                                .addTo(map);
-
-                            // Cercle de précision
-                            userCircle = L.circle([lat, lng], {
-                                radius: 100,
-                                color: '#3498db',
-                                fillColor: '#3498db',
-                                fillOpacity: 0.1,
-                                weight: 2
-                            }).addTo(map);
-
-                            // Calculer les distances
-                            calculateDistances(lat, lng);
-
-                            // Recentrer
-                            map.setView([lat, lng], 14);
+                            const accuracy = position.coords && position.coords.accuracy;
+                            appliquerPosition(lat, lng, accuracy);
                         },
                         function(error) {
+                            if (options.enableHighAccuracy) {
+                                demander({ enableHighAccuracy: false, timeout: 15000, maximumAge: 0 });
+                                return;
+                            }
+                            // Permission refusée ou GPS indisponible : on ne
+                            // fabrique aucune distance depuis un point par
+                            // défaut.
                             console.warn('Géolocalisation non disponible:', error);
-                            // Utiliser la position par défaut
-                            calculateDistances(defaultLat, defaultLng);
-                        }
+                            afficherPositionConnue();
+                        },
+                        options
                     );
-                } else {
-                    calculateDistances(defaultLat, defaultLng);
-                }
+                };
+
+                demander({ enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
             }
 
-            // ===== CALCUL DES DISTANCES =====
+            // ===== AFFICHAGE DES DISTANCES =====
+            // Mêmes règles que geoFormaterDistance() côté PHP, pour que la
+            // valeur affichée ne change pas après un rechargement.
+            function formaterDistance(metres) {
+                if (metres == null || isNaN(metres)) return null;
+                if (metres < 1000) {
+                    if (metres < 10) return Math.round(metres) + ' m';
+                    return (Math.round(metres / 10) * 10) + ' m';
+                }
+                return (Math.round(metres / 10) / 100).toFixed(2).replace('.', ',') + ' km';
+            }
+
             function calculateDistances(userLat, userLng) {
-                const distanceElements = document.querySelectorAll('.distance-value');
                 const listItems = document.querySelectorAll('.pharmacy-list-item');
 
-                listItems.forEach((item, index) => {
+                listItems.forEach(function(item) {
                     const lat = parseFloat(item.dataset.lat);
                     const lng = parseFloat(item.dataset.lng);
-                    
-                    if (!isNaN(lat) && !isNaN(lng)) {
-                        const distance = getDistance(userLat, userLng, lat, lng);
-                        const distanceEl = distanceElements[index];
-                        if (distanceEl) {
-                            if (distance < 1) {
-                                distanceEl.textContent = Math.round(distance * 1000) + ' m';
-                            } else {
-                                distanceEl.textContent = distance.toFixed(2) + ' km';
-                            }
-                        }
+                    if (isNaN(lat) || isNaN(lng)) return;
+
+                    const metres = getDistanceMetres(userLat, userLng, lat, lng);
+                    item.dataset.distance = metres.toFixed(1);
+
+                    const distanceEl = item.querySelector('.distance-value');
+                    if (distanceEl) {
+                        const texte = formaterDistance(metres);
+                        distanceEl.textContent = texte;
+                        distanceEl.title = "Distance à vol d'oiseau (ligne droite, non routière)";
+                        const icone = distanceEl.previousElementSibling;
+                        if (icone) icone.className = 'fas fa-route';
                     }
                 });
 
-                // Trier la liste par distance
                 const list = document.getElementById('pharmacyList');
                 const items = Array.from(list.querySelectorAll('.pharmacy-list-item'));
                 items.sort((a, b) => {
-                    const distA = parseFloat(a.querySelector('.distance-value')?.textContent || '999');
-                    const distB = parseFloat(b.querySelector('.distance-value')?.textContent || '999');
+                    const distA = parseFloat(a.dataset.distance);
+                    const distB = parseFloat(b.dataset.distance);
+                    if (isNaN(distA)) return 1;
+                    if (isNaN(distB)) return -1;
                     return distA - distB;
                 });
                 items.forEach(item => list.appendChild(item));
             }
 
-            // ===== FORMULE DE DISTANCE =====
-            function getDistance(lat1, lon1, lat2, lon2) {
-                const R = 6371; // Rayon de la Terre en km
+            // ===== MESURE DE DISTANCE =====
+            // Haversine, en mètres. La version PHP (geoDistanceMetres) est la
+            // référence : même formule, même rayon terrestre.
+            function getDistanceMetres(lat1, lon1, lat2, lon2) {
+                const R = 6371008.8;
                 const dLat = deg2rad(lat2 - lat1);
                 const dLon = deg2rad(lon2 - lon1);
-                const a = 
+                const a =
                     Math.sin(dLat/2) * Math.sin(dLat/2) +
-                    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+                    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
                     Math.sin(dLon/2) * Math.sin(dLon/2);
                 const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
                 return R * c;
@@ -1255,12 +1373,21 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
             getUserLocation();
 
             // ===== CONSOLE LOG =====
-            console.log('%c PharmaGeo - Carte des pharmacies ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c PharmaGeo - Carte des pharmacies ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
             console.log('%c Localisez les pharmacies à Porto-Novo.', 'color: #666; font-size: 14px;');
             console.log('%c Raccourcis : Ctrl+R (Recentrer) | Ctrl+F (Recherche)', 'color: #888; font-size: 12px;');
 
         });
     </script>
+
+    <!-- ===== GÉOLOCALISATION DE LA PERSONNE ===== -->
+    <script>
+        window.BASE_URL = <?php echo json_encode(BASE_URL); ?>;
+        window.PHARMA_GEO = <?php echo geoConfigJS($position); ?>;
+        window.PHARMA_GEO.endpoint = <?php echo json_encode(BASE_URL . 'api/geoloc_api.php'); ?>;
+        window.PHARMA_GEO.reload = true;
+    </script>
+    <script src="<?php echo BASE_URL; ?>assets/js/position.js"></script>
 
 </body>
     <script src="../../assets/js/responsive.js"></script>

@@ -11,6 +11,12 @@ ini_set('display_errors', 1);
 // ===== DÉFINITION DES CONSTANTES =====
 define('BASE_URL', 'http://localhost/pharmageo/');
 
+// ===== GESTION DES IMAGES (photos de profil) =====
+require_once __DIR__ . '/../includes/images.php';
+
+// ===== PAGINATION (10 éléments par page) =====
+require_once __DIR__ . '/../includes/pagination.php';
+
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
     $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
@@ -209,21 +215,49 @@ if (isset($_GET['action']) && $_GET['action'] === 'supprimer' && isset($_GET['id
     }
 }
 
+// ===== SUSPENSION / RÉACTIVATION D'UN MÉDICAMENT =====
+if (isset($_GET['action']) && in_array($_GET['action'], ['suspendre', 'reactiver']) && isset($_GET['id'])) {
+    $id = (int)$_GET['id'];
+    $nouveau_statut = $_GET['action'] === 'suspendre' ? 'suspendu' : 'actif';
+    try {
+        $stmt = $pdo->prepare("UPDATE medicament SET Statut = :statut WHERE Id_medicament = :id");
+        $stmt->execute([':statut' => $nouveau_statut, ':id' => $id]);
+        
+        $log = $pdo->prepare("INSERT INTO log (Action, Adresse_ip, Navigateur, Resultat, Id_utilisateur) 
+                              VALUES (CONCAT(:act, ' médicament ID: ', :id), :ip, :ua, 'succes', :user)");
+        $log->execute([
+            ':act' => $nouveau_statut === 'suspendu' ? 'Suspension' : 'Réactivation',
+            ':id' => $id,
+            ':ip' => $_SERVER['REMOTE_ADDR'] ?? '',
+            ':ua' => $_SERVER['HTTP_USER_AGENT'] ?? '',
+            ':user' => $_SESSION['user_id']
+        ]);
+        
+        $message = $nouveau_statut === 'suspendu' ? "Médicament suspendu avec succès !" : "Médicament réactivé avec succès !";
+        $message_type = "success";
+    } catch(PDOException $e) {
+        $message = "Erreur lors de la modification du statut : " . $e->getMessage();
+        $message_type = "danger";
+    }
+}
+
 // ===== RÉCUPÉRATION DES DONNÉES =====
 try {
     // Récupérer toutes les catégories
     $categories = $pdo->query("SELECT * FROM categorie ORDER BY Libelle ASC")->fetchAll();
     
-    // Récupérer tous les médicaments avec leurs catégories et statistiques
+    // Récupérer les médicaments de la page courante (pagination serveur)
     // Sous-requêtes : total_stocks = sticks avec quantité > 0, total_pharmacies = sticks total
+    $total_medicaments = (int) $pdo->query("SELECT COUNT(*) FROM medicament")->fetchColumn();
+    $pagination = pagination_calculer($total_medicaments);
     $medicaments = $pdo->query("
         SELECT m.*, c.Libelle as Categorie,
                (SELECT COUNT(*) FROM stock WHERE Id_medicament = m.Id_medicament AND Quantite > 0) as total_stocks,
                (SELECT COUNT(*) FROM stock WHERE Id_medicament = m.Id_medicament) as total_pharmacies
         FROM medicament m
         LEFT JOIN categorie c ON m.Id_categorie = c.Id_categorie
-        ORDER BY m.Nom_commercial ASC
-    ")->fetchAll();
+        ORDER BY m.Statut ASC, m.Nom_commercial ASC
+    " . pagination_sql_limite($pagination))->fetchAll();
 
     // Valeurs distinctes existantes pour l'autocomplétion
     $liste_noms_base = array_filter(array_column($pdo->query("SELECT DISTINCT Nom_commercial FROM medicament WHERE Nom_commercial IS NOT NULL AND Nom_commercial <> ''")->fetchAll(), 'Nom_commercial'));
@@ -281,14 +315,15 @@ try {
     // Statistiques
     $stats = [
         'total' => $pdo->query("SELECT COUNT(*) as total FROM medicament")->fetch()['total'] ?? 0,
-        'avec_stock' => $pdo->query("SELECT COUNT(DISTINCT m.Id_medicament) as total FROM medicament m JOIN stock s ON m.Id_medicament = s.Id_medicament WHERE s.Quantite > 0")->fetch()['total'] ?? 0,
-        'sans_stock' => $pdo->query("SELECT COUNT(*) as total FROM medicament m WHERE NOT EXISTS (SELECT 1 FROM stock s WHERE s.Id_medicament = m.Id_medicament AND s.Quantite > 0)")->fetch()['total'] ?? 0
+        'avec_stock' => $pdo->query("SELECT COUNT(DISTINCT m.Id_medicament) as total FROM medicament m JOIN stock s ON m.Id_medicament = s.Id_medicament WHERE s.Quantite > 0 AND m.Statut = 'actif'")->fetch()['total'] ?? 0,
+        'sans_stock' => $pdo->query("SELECT COUNT(*) as total FROM medicament m WHERE m.Statut = 'actif' AND NOT EXISTS (SELECT 1 FROM stock s WHERE s.Id_medicament = m.Id_medicament AND s.Quantite > 0)")->fetch()['total'] ?? 0,
+        'suspendus' => $pdo->query("SELECT COUNT(*) as total FROM medicament WHERE Statut = 'suspendu'")->fetch()['total'] ?? 0
     ];
     
 } catch(PDOException $e) {
     $categories = [];
     $medicaments = [];
-    $stats = ['total' => 0, 'avec_stock' => 0, 'sans_stock' => 0];
+    $stats = ['total' => 0, 'avec_stock' => 0, 'sans_stock' => 0, 'suspendus' => 0];
     $liste_noms = $liste_dci = $liste_formes = $liste_dosages = [];
     $message = "Erreur lors du chargement des données : " . $e->getMessage();
     $message_type = "danger";
@@ -327,18 +362,18 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --light-bg: #f0f2f5;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --light-bg: #F0FDF4;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-sm: 0 2px 20px rgba(0,0,0,0.04);
             --shadow-md: 0 8px 40px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
             --shadow-xl: 0 30px 80px rgba(0,0,0,0.16);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
-            --shadow-glow-orange: 0 8px 40px rgba(200, 120, 30, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
+            --shadow-glow-orange: 0 8px 40px rgba(21,128,61, 0.20);
             --radius: 16px;
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -387,6 +422,8 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
             left: 0;
             width: 260px;
             height: 100vh;
+            display: flex;
+            flex-direction: column;
             background: var(--dark-text);
             color: white;
             padding: 20px 0;
@@ -399,22 +436,28 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
         .sidebar::-webkit-scrollbar { width: 4px; }
         .sidebar::-webkit-scrollbar-thumb { background: var(--primary-green); border-radius: 4px; }
 
-        .sidebar .brand {
-            text-align: center;
-            padding: 20px 15px 30px;
+.sidebar .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 16px;
             border-bottom: 1px solid rgba(255,255,255,0.05);
         }
 
-        .sidebar .brand .brand-icon {
+.sidebar .brand .brand-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
-            padding: 12px 15px;
-            border-radius: 14px;
-            font-size: 2rem;
-            display: inline-block;
-            margin-bottom: 10px;
-        }
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+         color: #fff;}
 
-        .sidebar .brand h4 {
+.sidebar .brand h4 {
+            font-size: 1.1rem;
             font-weight: 800;
             margin: 0;
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
@@ -429,7 +472,7 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
             display: block;
         }
 
-        .sidebar .nav-menu { padding: 20px 15px; }
+        .sidebar .nav-menu { padding: 20px 15px; flex: 1; }
 
         .sidebar .nav-menu .nav-label {
             font-size: 0.7rem;
@@ -464,7 +507,7 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
         }
 
         .sidebar .nav-menu .nav-item.active {
-            background: linear-gradient(135deg, rgba(42,195,42,0.2), rgba(200,120,30,0.2));
+            background: linear-gradient(135deg, rgba(22,163,74,0.2), rgba(21,128,61,0.2));
             color: var(--primary-green);
             border-left: 3px solid var(--primary-green);
         }
@@ -472,10 +515,6 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
         .sidebar .nav-menu .nav-item i { width: 20px; text-align: center; font-size: 1rem; }
 
         .sidebar .user-profile {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
             padding: 20px;
             border-top: 1px solid rgba(255,255,255,0.05);
             display: flex;
@@ -499,6 +538,10 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
         .sidebar .user-profile .user-info { flex: 1; }
         .sidebar .user-profile .user-info .name { font-weight: 600; font-size: 0.9rem; color: white; }
         .sidebar .user-profile .user-info .role { font-size: 0.7rem; color: rgba(255,255,255,0.4); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
 
         /* ===== MAIN CONTENT ===== */
         .main-content {
@@ -564,7 +607,7 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
 
         .top-bar .page-actions .btn-action.btn-primary-custom:hover {
             transform: translateY(-2px);
-            box-shadow: 0 12px 40px rgba(42,195,42,0.3);
+            box-shadow: 0 12px 40px rgba(22,163,74,0.3);
         }
 
         .top-bar .page-actions .btn-action.btn-outline-custom {
@@ -674,18 +717,23 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
         }
 
         .stat-card .stat-icon.green {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .stat-card .stat-icon.orange {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
         .stat-card .stat-icon.blue {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
+        }
+
+        .stat-card .stat-icon.red {
+            background: rgba(220,38,38,0.1);
+            color: #DC2626;
         }
 
         .stat-card .stat-number {
@@ -720,14 +768,14 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--gray-text);
-            border-bottom: 2px solid #f0f0f0;
+            border-bottom: 2px solid #F0FDF4;
             padding: 12px 10px;
         }
 
         .table-custom tbody td {
             padding: 14px 10px;
             vertical-align: middle;
-            border-bottom: 1px solid #f5f5f5;
+            border-bottom: 1px solid #F0FDF4;
             font-size: 0.9rem;
         }
 
@@ -736,7 +784,7 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
         }
 
         .table-custom tbody tr:hover {
-            background: rgba(42,195,42,0.02);
+            background: rgba(22,163,74,0.02);
         }
 
         .table-custom tbody tr:last-child td {
@@ -752,23 +800,23 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
         }
 
         .badge-status.success {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .badge-status.warning {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
         .badge-status.danger {
-            background: rgba(231,76,60,0.1);
-            color: #e74c3c;
+            background: rgba(220,38,38,0.1);
+            color: #DC2626;
         }
 
         .badge-status.info {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         /* ===== BTN ACTION ===== */
@@ -786,7 +834,7 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
         }
 
         .btn-action-sm.btn-edit {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
@@ -796,22 +844,32 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
         }
 
         .btn-action-sm.btn-delete {
-            background: rgba(231,76,60,0.1);
-            color: #e74c3c;
+            background: rgba(220,38,38,0.1);
+            color: #DC2626;
         }
 
         .btn-action-sm.btn-delete:hover {
-            background: #e74c3c;
+            background: #DC2626;
             color: white;
         }
 
         .btn-action-sm.btn-view {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         .btn-action-sm.btn-view:hover {
-            background: #3498db;
+            background: #166534;
+            color: white;
+        }
+
+        .btn-action-sm.btn-suspend {
+            background: rgba(200,150,0,0.12);
+            color: #B91C1C;
+        }
+
+        .btn-action-sm.btn-suspend:hover {
+            background: #B91C1C;
             color: white;
         }
 
@@ -830,19 +888,19 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
         .alert-custom i { font-size: 1.2rem; margin-top: 2px; }
 
         .alert-custom-success {
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
             color: var(--primary-green);
             border-left: 4px solid var(--primary-green);
         }
 
         .alert-custom-danger {
-            background: rgba(231,76,60,0.08);
-            color: #e74c3c;
-            border-left: 4px solid #e74c3c;
+            background: rgba(220,38,38,0.08);
+            color: #DC2626;
+            border-left: 4px solid #DC2626;
         }
 
         .alert-custom-warning {
-            background: rgba(200,120,30,0.08);
+            background: rgba(21,128,61,0.08);
             color: var(--primary-orange);
             border-left: 4px solid var(--primary-orange);
         }
@@ -903,9 +961,9 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
             .stat-card .stat-number { font-size: 1.3rem; }
             .stat-card .stat-label { font-size: 0.7rem; }
             .stat-card .stat-icon { width: 32px; height: 32px; font-size: 0.9rem; }
-        }
-    </style>
-    <link rel="stylesheet" href="../assets/css/responsive.css">
+        }    </style>
+    <link rel="stylesheet" href="../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -914,11 +972,10 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
 
     <!-- ===== SIDEBAR ===== -->
     <aside class="sidebar" id="sidebar">
-        <div class="brand">
+        <a href="<?php echo BASE_URL; ?>index.php" class="brand" style="text-decoration: none;">
             <div class="brand-icon"><i class="fas fa-hospital"></i></div>
-            <h4>PharmaGeo</h4>
-            <small>Administration</small>
-        </div>
+            <div><h4>PharmaGeo</h4><small>Administration</small></div>
+        </a>
 
         <nav class="nav-menu">
             <div class="nav-label">Navigation</div>
@@ -964,21 +1021,28 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
                 <i class="fas fa-user-edit"></i>
                 <span>Mon profil</span>
             </a>
-            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);">
-                <i class="fas fa-sign-out-alt"></i>
-                <span>Déconnexion</span>
-            </a>
+
         </nav>
 
-        <div class="user-profile">
+        <a class="user-profile" href="<?php echo BASE_URL; ?>admin/profil.php" title="Voir mon profil">
             <div class="avatar">
-                <?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?>
+                <?php if (!empty($_SESSION['photo']) && pharma_image_disponible($_SESSION['photo'])): ?>
+                    <img src="<?php echo htmlspecialchars(pharma_image_url($_SESSION['photo'])); ?>" alt="">
+                <?php else: ?>
+                    <?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?>
+                <?php endif; ?>
             </div>
             <div class="user-info">
                 <div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div>
-                <div class="role"><i class="fas fa-crown me-1" style="color: #f1c40f;"></i> Administrateur</div>
-            </div>
-        </div>
+                <div class="role"><i class="fas fa-crown me-1" style="color: #DC2626;"></i> Administrateur</div>
+            <i class="fas fa-chevron-right profile-chevron"></i>
+        </a>
+    
+    <?php require_once __DIR__ . '/../includes/reinitialiser.php'; echo html_bloc_reinitialiser(); ?>
+    <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.15); margin-top: auto; text-decoration: none;">
+        <i class="fas fa-sign-out-alt"></i>
+        <span>Déconnexion</span>
+    </a>
     </aside>
 
     <!-- ===== MAIN CONTENT ===== -->
@@ -1033,6 +1097,15 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
                     <div class="stat-icon orange"><i class="fas fa-exclamation-circle"></i></div>
                 </div>
             </div>
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div>
+                        <div class="stat-number"><?php echo $stats['suspendus']; ?></div>
+                        <div class="stat-label">Suspendus</div>
+                    </div>
+                    <div class="stat-icon red"><i class="fas fa-pause-circle"></i></div>
+                </div>
+            </div>
         </div>
 
         <!-- ===== MESSAGES ===== -->
@@ -1054,6 +1127,7 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
                                 <th>DCI</th>
                                 <th>Catégorie</th>
                                 <th>Forme</th>
+                                <th>Statut</th>
                                 <th>Pharmacies</th>
                                 <th class="text-end">Actions</th>
                             </tr>
@@ -1075,6 +1149,11 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
                                     </td>
                                     <td><?php echo htmlspecialchars($med['Forme'] ?? '-'); ?></td>
                                     <td>
+                                        <span class="badge-status <?php echo $med['Statut'] === 'suspendu' ? 'danger' : 'success'; ?>">
+                                            <?php echo $med['Statut'] === 'suspendu' ? 'Suspendu' : 'Actif'; ?>
+                                        </span>
+                                    </td>
+                                    <td>
                                         <span class="badge-status <?php echo $med['total_pharmacies'] > 0 ? 'success' : 'warning'; ?>">
                                             <?php echo $med['total_pharmacies']; ?> pharmacies
                                         </span>
@@ -1084,14 +1163,31 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
                                     <td class="text-end">
                                         <div class="d-flex gap-1 justify-content-end flex-wrap">
                                             <a href="<?php echo BASE_URL; ?>admin/medicaments.php?action=edit&id=<?php echo $med['Id_medicament']; ?>" 
-                                               class="btn-action-sm btn-edit" data-bs-toggle="modal" data-bs-target="#editModal<?php echo $med['Id_medicament']; ?>">
+                                               class="btn-action-sm btn-edit" data-bs-toggle="modal" data-bs-target="#editModal<?php echo $med['Id_medicament']; ?>"
+                                               title="Modifier le médicament">
                                                 <i class="fas fa-edit"></i>
                                             </a>
                                             <a href="<?php echo BASE_URL; ?>admin/medicaments.php?action=supprimer&id=<?php echo $med['Id_medicament']; ?>" 
                                                class="btn-action-sm btn-delete"
-                                               onclick="return confirmDelete(<?php echo $med['Id_medicament']; ?>, '<?php echo addslashes($med['Nom_commercial']); ?>')">
+                                               onclick="return confirmDelete(<?php echo $med['Id_medicament']; ?>, '<?php echo addslashes($med['Nom_commercial']); ?>')"
+                                               title="Supprimer le médicament">
                                                 <i class="fas fa-trash"></i>
                                             </a>
+                                            <?php if ($med['Statut'] === 'suspendu'): ?>
+                                                <a href="<?php echo BASE_URL; ?>admin/medicaments.php?action=reactiver&id=<?php echo $med['Id_medicament']; ?>" 
+                                                   class="btn-action-sm btn-view"
+                                                   onclick="return confirmReactivate(<?php echo $med['Id_medicament']; ?>, '<?php echo addslashes($med['Nom_commercial']); ?>')"
+                                                   title="Réactiver le médicament (le rendre à nouveau visible des patients)">
+                                                    <i class="fas fa-play"></i>
+                                                </a>
+                                            <?php else: ?>
+                                                <a href="<?php echo BASE_URL; ?>admin/medicaments.php?action=suspendre&id=<?php echo $med['Id_medicament']; ?>" 
+                                                   class="btn-action-sm btn-suspend"
+                                                   onclick="return confirmSuspend(<?php echo $med['Id_medicament']; ?>, '<?php echo addslashes($med['Nom_commercial']); ?>')"
+                                                   title="Suspendre le médicament (le masquer des patients)">
+                                                    <i class="fas fa-pause"></i>
+                                                </a>
+                                            <?php endif; ?>
                                         </div>
                                     </td>
                                 </tr>
@@ -1099,12 +1195,15 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
                         </tbody>
                     </table>
                 </div>
+
+                <!-- ===== PAGINATION ===== -->
+                <?php pagination_afficher($pagination, [], 'médicaments'); ?>
             <?php else: ?>
                 <div class="empty-state">
                     <i class="fas fa-capsules"></i>
                     <h5>Aucun médicament trouvé</h5>
                     <p>Commencez par ajouter des médicaments à la plateforme.</p>
-                    <button class="btn btn-primary-custom mt-3" data-bs-toggle="modal" data-bs-target="#addModal" style="padding: 10px 28px; border-radius: 50px; background: linear-gradient(135deg, rgb(42,195,42), hsl(25,75%,47%)); color: white; border: none; font-weight: 600; transition: var(--transition);">
+                    <button class="btn btn-primary-custom mt-3" data-bs-toggle="modal" data-bs-target="#addModal" style="padding: 10px 28px; border-radius: 50px; background: linear-gradient(135deg, #16A34A, #166534); color: white; border: none; font-weight: 600; transition: var(--transition);">
                         <i class="fas fa-plus me-1"></i> Ajouter un médicament
                     </button>
                 </div>
@@ -1349,13 +1448,52 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
                     text: `Voulez-vous vraiment supprimer le médicament "${nom}" ? Cette action est irréversible.`,
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonColor: '#e74c3c',
-                    cancelButtonColor: '#6c757d',
+                    confirmButtonColor: '#DC2626',
+                    cancelButtonColor: '#64748B',
                     confirmButtonText: 'Oui, supprimer',
                     cancelButtonText: 'Annuler'
                 }).then((result) => {
                     if (result.isConfirmed) {
                         window.location.href = `<?php echo BASE_URL; ?>admin/medicaments.php?action=supprimer&id=${id}`;
+                    }
+                });
+                return false;
+            };
+
+            // ===== CONFIRMATION SUSPENSION / RÉACTIVATION =====
+            window.confirmSuspend = function(id, nom) {
+                event.preventDefault();
+                Swal.fire({
+                    title: '🛑 Suspendre le médicament',
+                    text: `Voulez-vous vraiment suspendre "${nom}" ? Il disparaîtra des recherches et réservations des patients.`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#B91C1C',
+                    cancelButtonColor: '#64748B',
+                    confirmButtonText: 'Oui, suspendre',
+                    cancelButtonText: 'Annuler'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = `<?php echo BASE_URL; ?>admin/medicaments.php?action=suspendre&id=${id}`;
+                    }
+                });
+                return false;
+            };
+
+            window.confirmReactivate = function(id, nom) {
+                event.preventDefault();
+                Swal.fire({
+                    title: 'Réactiver le médicament',
+                    text: `Voulez-vous réactiver "${nom}" ? Il sera de nouveau visible par les patients.`,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#166534',
+                    cancelButtonColor: '#64748B',
+                    confirmButtonText: 'Oui, réactiver',
+                    cancelButtonText: 'Annuler'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = `<?php echo BASE_URL; ?>admin/medicaments.php?action=reactiver&id=${id}`;
                     }
                 });
                 return false;
@@ -1396,7 +1534,7 @@ $page_title = 'Gestion des médicaments - Administration PharmaGeo';
             }
 
             // ===== CONSOLE LOG =====
-            console.log('%c PharmaGeo - Gestion des médicaments ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c PharmaGeo - Gestion des médicaments ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
             console.log('%c Raccourci : Ctrl+N pour ajouter un médicament', 'color: #666; font-size: 13px;');
 
         });

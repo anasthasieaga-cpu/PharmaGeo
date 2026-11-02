@@ -23,3 +23,14 @@ Options -Indexes
     RewriteEngine On
     RewriteBase /PharmaGeo/
 </IfModule>
+
+# ==============================================================
+# MODE MAINTENANCE
+# Le fichier ci-dessous est exécuté automatiquement AVANT chaque
+# page PHP. Il vérifie le paramètre maintenance_mode (table
+# `settings`) et bloque l'accès pour les non-administrateurs.
+# Adapter le chemin si le projet est déplacé sur le disque.
+# ==============================================================
+<IfModule php_module>
+    php_value auto_prepend_file "C:/xampp/htdocs/PharmaGeo/includes/maintenance_boot.php"
+</IfModule>

@@ -87,8 +87,9 @@ if ($method === 'POST') {
     try {
         // Vérifier le stock et la disponibilité
         $stmt = $pdo->prepare("
-            SELECT s.*, p.Statut as Pharmacie_Statut
+            SELECT s.*, p.Statut as Pharmacie_Statut, m.Statut as Medicament_Statut
             FROM stock s
+            JOIN medicament m ON s.Id_medicament = m.Id_medicament
             JOIN pharmacie p ON s.Id_pharmacie = p.Id_pharmacie
             WHERE s.Id_stock = :id
         ");
@@ -109,7 +110,8 @@ if ($method === 'POST') {
         }
 
         // Vérifier le stock suffisant : quantité demanded vs quantité, hors rupture
-        if ($stock['Quantite'] < $quantite || $stock['Statut'] === 'rupture' || $stock['Statut'] === 'desactive') {
+        if ($stock['Quantite'] < $quantite || $stock['Statut'] === 'rupture' || $stock['Statut'] === 'desactive' ||
+            (isset($stock['Medicament_Statut']) && $stock['Medicament_Statut'] === 'suspendu')) {
             http_response_code(400);
             echo json_encode(['error' => 'Stock insuffisant pour cette quantité.']);
             exit;

@@ -1,0 +1,1409 @@
+/* ============================================================
+   PharmaGeo — Recherche de médicaments
+   Feuille de style dédiée : design moderne, aéré et responsive.
+   Palette : vert médical / vert foncé / blanc.
+   ============================================================ */
+
+:root {
+    --rg-primary: #16A34A;
+    --rg-dark: #166534;
+    --rg-white: #FFFFFF;
+    --rg-soft: #F0FDF4;
+    --rg-text: #1F2937;
+    --rg-muted: #64748B;
+    --rg-danger: #DC2626;
+    --rg-border: #D9E9DF;
+    --rg-radius: 20px;
+    --rg-radius-sm: 14px;
+    --rg-shadow: 0 10px 30px rgba(22, 83, 52, 0.08);
+    --rg-shadow-lg: 0 18px 45px rgba(22, 83, 52, 0.14);
+    --rg-font: "Segoe UI", Roboto, "Helvetica Neue", system-ui, -apple-system, sans-serif;
+}
+
+/* ============================================================
+   1. HERO + ZONE DE RECHERCHE
+   ============================================================ */
+
+.rg-hero {
+    position: relative;
+    overflow: hidden;
+    padding: 46px 0 92px;
+    background: linear-gradient(135deg, #16A34A 0%, #166534 100%);
+    color: var(--rg-white);
+}
+
+/* Motif décoratif discret (cercles flous) */
+.rg-hero__bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(circle at 12% 18%, rgba(255, 255, 255, 0.16) 0, rgba(255, 255, 255, 0) 42%),
+        radial-gradient(circle at 88% 8%, rgba(255, 255, 255, 0.13) 0, rgba(255, 255, 255, 0) 38%),
+        radial-gradient(circle at 72% 96%, rgba(22, 163, 74, 0.42) 0, rgba(22, 163, 74, 0) 46%);
+}
+
+/* Croix pharmacie en filigrane */
+.rg-hero__bg::after {
+    content: "\f484";
+    font-family: "Font Awesome 6 Free", "Font Awesome 6 Pro", "Font Awesome 5 Free", sans-serif;
+    font-weight: 900;
+    position: absolute;
+    right: 3%;
+    bottom: -34px;
+    font-size: 220px;
+    line-height: 1;
+    color: rgba(255, 255, 255, 0.07);
+    transform: rotate(-12deg);
+}
+
+.rg-hero__inner {
+    position: relative;
+    z-index: 1;
+    max-width: 880px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.rg-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: var(--rg-white);
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 7px 16px;
+    border-radius: 50px;
+    margin-bottom: 18px;
+}
+
+.rg-hero__title {
+    color: var(--rg-white);
+    font-size: clamp(1.75rem, 4.4vw, 2.85rem);
+    font-weight: 800;
+    letter-spacing: -0.4px;
+    margin: 0 0 12px;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+}
+
+.rg-hero__sub {
+    color: rgba(255, 255, 255, 0.94);
+    font-size: clamp(0.97rem, 1.6vw, 1.09rem);
+    line-height: 1.65;
+    max-width: 700px;
+    margin: 0 auto 30px;
+}
+
+/* ---------- Barre de recherche ---------- */
+
+.rg-search {
+    position: relative;
+    background: var(--rg-white);
+    border-radius: var(--rg-radius);
+    box-shadow: 0 22px 55px rgba(6, 40, 22, 0.28);
+    padding: 10px;
+    text-align: left;
+}
+
+.rg-search__tabs {
+    display: flex;
+    gap: 6px;
+    padding: 4px 4px 10px;
+    border-bottom: 1px solid var(--rg-border);
+    margin-bottom: 12px;
+}
+
+.rg-search__tab {
+    border: 0;
+    background: transparent;
+    color: var(--rg-muted);
+    font-weight: 600;
+    font-size: 0.88rem;
+    padding: 8px 16px;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.rg-search__tab:hover {
+    background: var(--rg-soft);
+    color: var(--rg-dark);
+}
+
+.rg-search__tab.is-active {
+    background: var(--rg-primary);
+    color: var(--rg-white);
+    box-shadow: 0 6px 16px rgba(22, 163, 74, 0.28);
+}
+
+.rg-search__field {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.rg-search__icon {
+    position: absolute;
+    left: 20px;
+    color: var(--rg-primary);
+    font-size: 1.1rem;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.rg-search__input {
+    flex: 1;
+    border: 2px solid transparent;
+    background: var(--rg-soft);
+    border-radius: var(--rg-radius-sm);
+    padding: 15px 18px 15px 48px;
+    font-size: 1.02rem;
+    font-family: inherit;
+    color: var(--rg-text);
+    min-height: 56px;
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.rg-search__input::placeholder {
+    color: #94A3B8;
+}
+
+.rg-search__input:focus {
+    outline: none;
+    background: var(--rg-white);
+    border-color: var(--rg-primary);
+    box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.12);
+}
+
+.rg-search__textarea {
+    min-height: 92px;
+    resize: vertical;
+    line-height: 1.55;
+    padding-top: 14px;
+}
+
+.rg-search__input.is-hidden {
+    display: none;
+}
+
+/* Arrivée sur la zone de résultats : la zone reçoit le focus
+   programmatique, on masque donc le contour par défaut. */
+#resultats:focus,
+#resultats:focus-visible {
+    outline: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .rg-apparait {
+        animation: rg-rise 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+}
+
+@keyframes rg-rise {
+    from {
+        opacity: 0;
+        transform: translateY(22px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.rg-search__submit {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    border: 0;
+    cursor: pointer;
+    background: linear-gradient(135deg, var(--rg-primary), var(--rg-dark));
+    color: var(--rg-white);
+    font-weight: 700;
+    font-size: 1rem;
+    font-family: inherit;
+    padding: 15px 30px;
+    border-radius: var(--rg-radius-sm);
+    min-height: 56px;
+    white-space: nowrap;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.rg-search__submit:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 28px rgba(22, 163, 74, 0.36);
+    color: var(--rg-white);
+    filter: brightness(1.05);
+}
+
+.rg-search__submit:active {
+    transform: translateY(0);
+}
+
+.rg-search__hint {
+    color: var(--rg-muted);
+    font-size: 0.85rem;
+    margin: 12px 6px 2px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+/* ---------- Suggestions pendant la saisie ---------- */
+
+.rg-suggest {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 6px);
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    background: var(--rg-white);
+    border: 1px solid var(--rg-border);
+    border-radius: var(--rg-radius-sm);
+    box-shadow: var(--rg-shadow-lg);
+    max-height: 290px;
+    overflow-y: auto;
+    z-index: 40;
+}
+
+.rg-suggest[hidden] {
+    display: none;
+}
+
+.rg-suggest__item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    color: var(--rg-text);
+    font-size: 0.94rem;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.rg-suggest__item i {
+    color: var(--rg-primary);
+    font-size: 0.85rem;
+}
+
+.rg-suggest__item:hover,
+.rg-suggest__item.is-active {
+    background: var(--rg-soft);
+    color: var(--rg-dark);
+    font-weight: 600;
+}
+
+.rg-suggest__item mark {
+    background: transparent;
+    color: var(--rg-dark);
+    font-weight: 800;
+    padding: 0;
+}
+
+.rg-suggest__empty {
+    padding: 12px 14px;
+    color: var(--rg-muted);
+    font-size: 0.88rem;
+}
+
+/* ---------- Chiffres de confiance ---------- */
+
+.rg-stats {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    max-width: 760px;
+    margin: 26px auto 0;
+}
+
+.rg-stat {
+    background: rgba(255, 255, 255, 0.13);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: var(--rg-radius-sm);
+    padding: 14px 12px;
+    text-align: center;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.rg-stat:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-3px);
+}
+
+.rg-stat__value {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 800;
+    line-height: 1.2;
+}
+
+.rg-stat__label {
+    display: block;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.9);
+    margin-top: 2px;
+}
+
+/* ============================================================
+   2. ZONE DE RÉSULTATS
+   ============================================================ */
+
+.rg-zone {
+    padding: 30px 0 60px;
+    background: var(--rg-white);
+}
+
+.rg-zone--soft {
+    background: var(--rg-soft);
+}
+
+/* ---------- Filtres ---------- */
+
+.rg-filters {
+    background: var(--rg-white);
+    border: 1px solid var(--rg-border);
+    border-radius: var(--rg-radius);
+    box-shadow: var(--rg-shadow);
+    padding: 20px;
+    margin-bottom: 22px;
+}
+
+.rg-filters__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.rg-filters__title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--rg-text);
+    margin: 0;
+}
+
+.rg-filters__title i {
+    color: var(--rg-primary);
+}
+
+.rg-filters__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 14px;
+}
+
+.rg-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.rg-field__label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--rg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.rg-select,
+.rg-searchmin {
+    width: 100%;
+    border: 1.5px solid var(--rg-border);
+    background: var(--rg-white);
+    border-radius: 12px;
+    padding: 11px 14px;
+    font-family: inherit;
+    font-size: 0.93rem;
+    color: var(--rg-text);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.rg-select:focus,
+.rg-searchmin:focus {
+    outline: none;
+    border-color: var(--rg-primary);
+    box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.12);
+}
+
+.rg-select.is-set,
+.rg-searchmin.is-set {
+    border-color: var(--rg-primary);
+    background: var(--rg-soft);
+    font-weight: 600;
+    color: var(--rg-dark);
+}
+
+.rg-reset {
+    border: 1.5px solid var(--rg-border);
+    background: var(--rg-white);
+    color: var(--rg-muted);
+    font-family: inherit;
+    font-size: 0.88rem;
+    font-weight: 600;
+    padding: 10px 16px;
+    border-radius: 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+
+.rg-reset:hover {
+    border-color: var(--rg-primary);
+    color: var(--rg-primary);
+    background: var(--rg-soft);
+}
+
+/* Filtres actifs */
+.rg-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.rg-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--rg-soft);
+    border: 1px solid rgba(22, 163, 74, 0.3);
+    color: var(--rg-dark);
+    font-size: 0.83rem;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 50px;
+    animation: rgFadeUp 0.25s ease;
+}
+
+.rg-chip button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    opacity: 0.65;
+    font-size: 0.85rem;
+}
+
+.rg-chip button:hover {
+    opacity: 1;
+}
+
+/* ---------- Barre de résultats ---------- */
+
+.rg-results-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+
+.rg-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    background: var(--rg-white);
+    border: 1px solid var(--rg-border);
+    border-radius: 50px;
+    padding: 9px 18px;
+    font-weight: 700;
+    color: var(--rg-dark);
+    box-shadow: var(--rg-shadow);
+}
+
+.rg-count i {
+    color: var(--rg-primary);
+}
+
+/* ---------- Grille + cartes ---------- */
+
+.rg-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    gap: 20px;
+}
+
+.rg-grid--wide {
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+}
+
+.rg-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--rg-white);
+    border: 1px solid var(--rg-border);
+    border-radius: var(--rg-radius);
+    box-shadow: var(--rg-shadow);
+    overflow: hidden;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    animation: rgFadeUp 0.45s ease both;
+}
+
+.rg-card:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--rg-shadow-lg);
+    border-color: rgba(22, 163, 74, 0.42);
+}
+
+.rg-card.is-hidden {
+    display: none;
+}
+
+/* Bandeau supérieur coloré */
+.rg-card__band {
+    height: 5px;
+    background: linear-gradient(90deg, var(--rg-primary), var(--rg-dark));
+}
+
+.rg-card__band--off {
+    background: linear-gradient(90deg, #94A3B8, #64748B);
+}
+
+.rg-card__body {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    padding: 20px;
+}
+
+.rg-card__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.rg-card__title {
+    font-size: 1.13rem;
+    font-weight: 800;
+    color: var(--rg-text);
+    margin: 0 0 4px;
+    line-height: 1.3;
+}
+
+.rg-card__sub {
+    font-size: 0.87rem;
+    color: var(--rg-muted);
+    margin: 0;
+}
+
+/* Badges */
+.rg-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    padding: 5px 11px;
+    border-radius: 50px;
+    white-space: nowrap;
+}
+
+.rg-badge--ok {
+    background: rgba(22, 163, 74, 0.12);
+    color: var(--rg-dark);
+    border: 1px solid rgba(22, 163, 74, 0.28);
+}
+
+.rg-badge--off {
+    background: #F1F5F9;
+    color: #64748B;
+    border: 1px solid #E2E8F0;
+}
+
+.rg-badge--danger {
+    background: rgba(220, 38, 38, 0.1);
+    color: #B91C1C;
+    border: 1px solid rgba(220, 38, 38, 0.25);
+}
+
+.rg-badge--info {
+    background: var(--rg-soft);
+    color: var(--rg-dark);
+    border: 1px solid var(--rg-border);
+}
+
+/* Grille de caractéristiques */
+.rg-specs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.rg-spec {
+    background: var(--rg-soft);
+    border-radius: 12px;
+    padding: 10px 12px;
+    min-width: 0;
+}
+
+.rg-spec__label {
+    display: block;
+    font-size: 0.71rem;
+    font-weight: 700;
+    color: var(--rg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 2px;
+}
+
+.rg-spec__value {
+    display: block;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--rg-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rg-spec__value--price {
+    color: var(--rg-primary);
+}
+
+/* Encart pharmacie */
+.rg-card__pharma {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    background: var(--rg-white);
+    border: 1.5px dashed var(--rg-border);
+    border-radius: var(--rg-radius-sm);
+    padding: 12px 14px;
+    margin-bottom: 14px;
+}
+
+.rg-card__pharma-ico {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    border-radius: 12px;
+    background: var(--rg-soft);
+    color: var(--rg-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+}
+
+.rg-card__pharma-name {
+    font-weight: 700;
+    color: var(--rg-text);
+    font-size: 0.94rem;
+    margin: 0 0 2px;
+}
+
+.rg-card__pharma-meta {
+    font-size: 0.8rem;
+    color: var(--rg-muted);
+    margin: 0;
+}
+
+/* Actions */
+.rg-card__actions {
+    display: flex;
+    gap: 10px;
+    margin-top: auto;
+}
+
+.rg-btn {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 12px;
+    padding: 11px 14px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    text-decoration: none;
+    cursor: pointer;
+    font-family: inherit;
+    border: 1.5px solid transparent;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.rg-btn--ghost {
+    background: var(--rg-white);
+    border-color: var(--rg-border);
+    color: var(--rg-dark);
+}
+
+.rg-btn--ghost:hover {
+    border-color: var(--rg-primary);
+    background: var(--rg-soft);
+    color: var(--rg-dark);
+    transform: translateY(-2px);
+}
+
+.rg-btn--primary {
+    background: linear-gradient(135deg, var(--rg-primary), var(--rg-dark));
+    color: var(--rg-white);
+    box-shadow: 0 8px 18px rgba(22, 163, 74, 0.24);
+}
+
+.rg-btn--primary:hover {
+    color: var(--rg-white);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 24px rgba(22, 163, 74, 0.34);
+}
+
+.rg-btn[disabled],
+.rg-btn--disabled {
+    background: #F1F5F9;
+    border-color: #E2E8F0;
+    color: #94A3B8;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.rg-btn[disabled]:hover,
+.rg-btn--disabled:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+/* Détails dépliables */
+.rg-details {
+    border-top: 1px solid var(--rg-border);
+    margin-top: 14px;
+    padding-top: 12px;
+}
+
+.rg-details summary {
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: var(--rg-primary);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+}
+
+.rg-details summary::-webkit-details-marker {
+    display: none;
+}
+
+.rg-details summary i {
+    transition: transform 0.2s ease;
+}
+
+.rg-details[open] summary i.fa-chevron-down {
+    transform: rotate(180deg);
+}
+
+.rg-details__body {
+    font-size: 0.89rem;
+    color: var(--rg-muted);
+    line-height: 1.65;
+    padding-top: 8px;
+}
+
+.rg-details__body strong {
+    color: var(--rg-text);
+}
+
+/* ============================================================
+   3. CARTE GÉOGRAPHIQUE
+   ============================================================ */
+
+.rg-map {
+    background: var(--rg-white);
+    border: 1px solid var(--rg-border);
+    border-radius: var(--rg-radius);
+    box-shadow: var(--rg-shadow);
+    overflow: hidden;
+    margin-bottom: 26px;
+}
+
+.rg-map__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--rg-border);
+    background: var(--rg-soft);
+}
+
+.rg-map__title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+    color: var(--rg-dark);
+    margin: 0;
+    font-size: 1.04rem;
+}
+
+.rg-map__title i {
+    color: var(--rg-primary);
+}
+
+.rg-map__wrap {
+    position: relative;
+    height: 400px;
+}
+
+.rg-map__canvas {
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    background: #EAF3EE;
+}
+
+.rg-map__loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--rg-muted);
+    font-weight: 600;
+    z-index: 500;
+}
+
+.rg-map__loading[hidden] {
+    display: none;
+}
+
+.rg-map__toggle {
+    border: 1.5px solid var(--rg-border);
+    background: var(--rg-white);
+    color: var(--rg-dark);
+    font-family: inherit;
+    font-size: 0.86rem;
+    font-weight: 700;
+    padding: 8px 16px;
+    border-radius: 50px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+
+.rg-map__toggle:hover {
+    border-color: var(--rg-primary);
+    color: var(--rg-primary);
+}
+
+.rg-map__legend {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    padding: 12px 20px;
+    border-top: 1px solid var(--rg-border);
+    font-size: 0.83rem;
+    color: var(--rg-muted);
+}
+
+.rg-map__legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.rg-map__legend i {
+    color: var(--rg-primary);
+}
+
+.rg-map__legend .lg-user {
+    color: var(--rg-dark);
+}
+
+/* Bulle de carte */
+.rg-popup .name {
+    font-weight: 800;
+    color: var(--rg-dark);
+    margin-bottom: 3px;
+}
+
+.rg-popup .addr {
+    color: var(--rg-muted);
+    font-size: 0.84rem;
+    margin-bottom: 6px;
+}
+
+.rg-popup .tag {
+    display: inline-block;
+    background: rgba(22, 163, 74, 0.12);
+    color: var(--rg-dark);
+    border-radius: 50px;
+    padding: 3px 10px;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.rg-map--hidden .rg-map__wrap {
+    display: none;
+}
+
+/* ============================================================
+   4. ÉTATS : VIDE, CHARGEMENT
+   ============================================================ */
+
+.rg-empty {
+    text-align: center;
+    background: var(--rg-white);
+    border: 2px dashed var(--rg-border);
+    border-radius: var(--rg-radius);
+    padding: 46px 26px;
+    animation: rgFadeUp 0.4s ease both;
+}
+
+.rg-empty__ico {
+    width: 92px;
+    height: 92px;
+    margin: 0 auto 18px;
+    border-radius: 50%;
+    background: var(--rg-soft);
+    color: var(--rg-primary);
+    font-size: 2.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.rg-empty h3 {
+    color: var(--rg-text);
+    font-weight: 800;
+    margin-bottom: 8px;
+}
+
+.rg-empty p {
+    color: var(--rg-muted);
+    max-width: 480px;
+    margin: 0 auto 20px;
+}
+
+.rg-loading {
+    display: none;
+    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+}
+
+.rg-loading.is-on {
+    display: grid;
+}
+
+.rg-skeleton {
+    background: var(--rg-white);
+    border: 1px solid var(--rg-border);
+    border-radius: var(--rg-radius);
+    padding: 20px;
+}
+
+.rg-skeleton__line {
+    height: 13px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #EAF3EE 25%, #F0FDF4 50%, #EAF3EE 75%);
+    background-size: 200% 100%;
+    animation: rgShimmer 1.3s infinite;
+    margin-bottom: 10px;
+}
+
+.rg-skeleton__line--short { width: 55%; }
+.rg-skeleton__line--mid { width: 78%; }
+.rg-skeleton__block {
+    height: 78px;
+    border-radius: 12px;
+    background: linear-gradient(90deg, #EAF3EE 25%, #F0FDF4 50%, #EAF3EE 75%);
+    background-size: 200% 100%;
+    animation: rgShimmer 1.3s infinite;
+    margin-bottom: 14px;
+}
+
+/* Bandeau d'alerte modernisé */
+.rg-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    border-radius: var(--rg-radius-sm);
+    padding: 15px 18px;
+    margin-bottom: 18px;
+    border: 1px solid;
+    font-size: 0.93rem;
+    line-height: 1.6;
+    animation: rgFadeUp 0.4s ease both;
+}
+
+.rg-alert i.rg-alert__ico {
+    font-size: 1.1rem;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.rg-alert--ok {
+    background: var(--rg-soft);
+    border-color: rgba(22, 163, 74, 0.3);
+    color: var(--rg-dark);
+}
+
+.rg-alert--warn {
+    background: #FFFBEB;
+    border-color: rgba(217, 119, 6, 0.28);
+    color: #92400E;
+}
+
+.rg-alert--danger {
+    background: #FEF2F2;
+    border-color: rgba(220, 38, 38, 0.28);
+    color: #B91C1C;
+}
+
+.rg-alert--info {
+    background: var(--rg-white);
+    border-color: var(--rg-border);
+    color: var(--rg-text);
+}
+
+.rg-alert__body {
+    flex: 1;
+    min-width: 0;
+}
+
+.rg-alert__title {
+    font-weight: 800;
+    display: block;
+    margin-bottom: 3px;
+}
+
+/* ============================================================
+   4 bis. CLASSES CONSERVÉES DE L'ANCIEN AFFICHAGE
+   Elles étaient déclarées dans un bloc <style> propre à la page ;
+   on les réintroduit ici pour que rien ne soit perdu.
+   ============================================================ */
+
+/* Pastille de médicament dans l'en-tête des pharmacies */
+.med-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(22, 163, 74, 0.08);
+    color: var(--rg-dark);
+    border-radius: 50px;
+    padding: 5px 13px;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+/* Lien sur le nom de la pharmacie */
+.lien-pharmacie {
+    color: inherit;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.lien-pharmacie:hover {
+    color: var(--rg-dark);
+    text-decoration: underline;
+}
+
+/* Ligne de médicament dans une carte pharmacie */
+.med-row {
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.med-row:hover {
+    background: #DCFCE7 !important;
+    transform: translateX(2px);
+}
+
+/* Carte pharmacie : légère levée au survol */
+.pharmacy-card:hover .med-row {
+    border-color: rgba(22, 163, 74, 0.3);
+}
+
+/* ============================================================
+   4 ter. CASE À COCHER DE SÉLECTION (redimensionnée en pastille)
+   Le nom de classe d'origine est conservé : le JavaScript s'y
+   appuie pour marquer la carte comme sélectionnée.
+   ============================================================ */
+
+.checkbox-card.rg-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 6px;
+    margin: 0;
+    border: 2px solid var(--rg-border);
+    border-radius: 12px;
+    background: var(--rg-white);
+    flex-shrink: 0;
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.checkbox-card.rg-check:hover {
+    border-color: var(--rg-primary);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(22, 163, 74, 0.14);
+}
+
+.checkbox-card.rg-check.selected {
+    border-color: var(--rg-primary);
+    background: var(--rg-soft);
+}
+
+.checkbox-card.rg-check .custom-check {
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    border: 2px solid var(--rg-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: transparent;
+    font-size: 0.75rem;
+    transition: all 0.2s ease;
+}
+
+.checkbox-card.rg-check.selected .custom-check {
+    background: var(--rg-primary);
+    border-color: var(--rg-primary);
+    color: var(--rg-white);
+}
+
+.checkbox-card.rg-check input:focus-visible + .custom-check {
+    outline: 3px solid rgba(22, 163, 74, 0.4);
+    outline-offset: 2px;
+}
+
+/* ============================================================
+   5. ANIMATIONS
+   ============================================================ */
+
+@keyframes rgFadeUp {
+    from {
+        opacity: 0;
+        transform: translateY(14px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes rgShimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+}
+
+@keyframes rgSpin {
+    to { transform: rotate(360deg); }
+}
+
+.rg-spinner {
+    display: none;
+    width: 17px;
+    height: 17px;
+    border: 2.5px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: rgSpin 0.7s linear infinite;
+}
+
+.rg-search__submit.is-loading .rg-spinner {
+    display: inline-block;
+}
+
+.rg-search__submit.is-loading .rg-search__submit-label {
+    opacity: 0.75;
+}
+
+/* ============================================================
+   6. RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 991px) {
+    .rg-grid,
+    .rg-grid--wide,
+    .rg-loading {
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    }
+
+    .rg-map__wrap {
+        height: 340px;
+    }
+}
+
+@media (max-width: 767px) {
+    .rg-hero {
+        padding: 32px 0 74px;
+    }
+
+    .rg-search__field {
+        flex-wrap: wrap;
+    }
+
+    .rg-search__icon {
+        left: 16px;
+        top: 16px;
+    }
+
+    .rg-search__input,
+    .rg-search__textarea {
+        padding-left: 44px;
+        width: 100%;
+        min-height: 52px;
+    }
+
+    .rg-search__submit {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .rg-stats {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .rg-stat {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        text-align: left;
+        padding: 12px 16px;
+    }
+
+    .rg-stat__label {
+        margin-top: 0;
+    }
+
+    .rg-grid,
+    .rg-grid--wide,
+    .rg-loading {
+        grid-template-columns: 1fr;
+    }
+
+    .rg-specs {
+        grid-template-columns: 1fr;
+    }
+
+    .rg-card__actions {
+        flex-direction: column;
+    }
+
+    .rg-filters {
+        padding: 16px;
+    }
+
+    .rg-map__wrap {
+        height: 290px;
+    }
+
+    .rg-hero__bg::after {
+        font-size: 130px;
+        bottom: -20px;
+    }
+}
+
+@media (max-width: 480px) {
+    .rg-search__tabs {
+        overflow-x: auto;
+    }
+
+    .rg-card__body {
+        padding: 16px;
+    }
+
+    .rg-filters__grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Accessibilité : on respecte le réglage système */
+@media (prefers-reduced-motion: reduce) {
+    .rg-card,
+    .rg-stat,
+    .rg-empty,
+    .rg-alert,
+    .rg-chip,
+    .rg-btn {
+        animation: none !important;
+        transition: none !important;
+    }
+
+    .rg-card:hover,
+    .rg-stat:hover,
+    .rg-btn:hover {
+        transform: none !important;
+    }
+
+    .rg-skeleton__line,
+    .rg-skeleton__block {
+        animation: none;
+    }
+}
+
+/* Impression : on masque les filtres et la carte */
+@media print {
+    .rg-hero__bg,
+    .rg-filters,
+    .rg-map,
+    .rg-card__actions {
+        display: none !important;
+    }
+
+    .rg-card {
+        break-inside: avoid;
+        box-shadow: none;
+    }
+}
+
+/* ===== FICHE DU MÉDICAMENT TROUVÉ =====
+   Affichée juste après le clic sur « Rechercher » quand un seul
+   médicament correspond : c'est le point de départ du résultat,
+   les pharmacies suivent en dessous. */
+.rg-direct {
+    margin-bottom: 1.75rem;
+}
+
+.rg-direct > .rg-filters__title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.rg-direct .rg-card {
+    border-color: #BBF7D0;
+    box-shadow: 0 18px 44px -30px rgba(22, 101, 52, 0.55);
+}
+
+.rg-direct .rg-card__title {
+    font-size: 1.35rem;
+}

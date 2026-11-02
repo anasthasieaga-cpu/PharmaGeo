@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Photo de pharmacie par défaut">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#DCFCE7"/>
+      <stop offset="1" stop-color="#BBF7D0"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" fill="url(#bg2)"/>
+  <path d="M50 62h100l14 26v62a8 8 0 0 1-8 8H44a8 8 0 0 1-8-8V88z" fill="#16A34A"/>
+  <path d="M36 88h128v10H36z" fill="#166534"/>
+  <rect x="58" y="108" width="26" height="50" rx="3" fill="#DCFCE7"/>
+  <rect x="116" y="108" width="26" height="50" rx="3" fill="#DCFCE7"/>
+  <path d="M92 112h16v14h14v16h-14v14H92v-14H78v-16h14z" fill="#FFFFFF"/>
+</svg>

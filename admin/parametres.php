@@ -11,6 +11,9 @@ ini_set('display_errors', 1);
 // ===== DÉFINITION DES CONSTANTES =====
 define('BASE_URL', 'http://localhost/pharmageo/');
 
+// ===== GESTION DES IMAGES (photos de profil) =====
+require_once __DIR__ . '/../includes/images.php';
+
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
     $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
@@ -30,6 +33,9 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'administrateur') {
     header('Location: ' . BASE_URL . 'connexion.php');
     exit();
 }
+
+// ===== HELPER MODE MAINTENANCE =====
+require_once __DIR__ . '/../includes/maintenance.php';
 
 // ===== RÉCUPÉRATION DES INFORMATIONS ADMIN =====
 try {
@@ -70,6 +76,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($prenom)) $errors[] = "Le prénom est obligatoire.";
         if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = "L'email est invalide.";
         
+        if (empty($errors)) {
+            $check = $pdo->prepare("SELECT COUNT(*) as total FROM utilisateur WHERE LOWER(Email) = LOWER(:email) AND Id_utilisateur != :id");
+            $check->execute([':email' => $email, ':id' => $_SESSION['user_id']]);
+            if ($check->fetchColumn() > 0) {
+                $errors[] = "Cet email est déjà utilisé par un autre compte.";
+            }
+        }
+
         if (empty($errors)) {
             try {
                 $stmt = $pdo->prepare("UPDATE utilisateur SET Nom = :nom, Prenom = :prenom, Email = :email, Telephone = :telephone WHERE Id_utilisateur = :id");
@@ -149,7 +163,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['site_name'] = $site_name;
         $_SESSION['site_description'] = $site_description;
         
-        $success = "Paramètres généraux mis à jour avec succès !";
+        // Le mode maintenance est persistant (base de données) et s'applique
+        // à toute la plateforme, pas seulement à la session de l'administrateur.
+        $_SESSION['maintenance_mode'] = $maintenance_mode;
+        maintenance_enregistrer((bool)$maintenance_mode);
+        
+        if ($maintenance_mode) {
+            $success = "Mode maintenance ACTIVÉ : la plateforme est temporairement inaccessible aux "
+                     . "utilisateurs non-administrateurs.";
+        } else {
+            $success = "Paramètres généraux mis à jour avec succès ! Le mode maintenance est désactivé, "
+                     . "la plateforme est accessible à tous.";
+        }
     }
 }
 
@@ -177,18 +202,18 @@ $page_title = 'Paramètres - Administration PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --light-bg: #f0f2f5;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --light-bg: #F0FDF4;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-sm: 0 2px 20px rgba(0,0,0,0.04);
             --shadow-md: 0 8px 40px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
             --shadow-xl: 0 30px 80px rgba(0,0,0,0.16);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
-            --shadow-glow-orange: 0 8px 40px rgba(200, 120, 30, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
+            --shadow-glow-orange: 0 8px 40px rgba(21,128,61, 0.20);
             --radius: 16px;
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -248,6 +273,8 @@ $page_title = 'Paramètres - Administration PharmaGeo';
             left: 0;
             width: 260px;
             height: 100vh;
+            display: flex;
+            flex-direction: column;
             background: var(--dark-text);
             color: white;
             padding: 20px 0;
@@ -260,22 +287,28 @@ $page_title = 'Paramètres - Administration PharmaGeo';
         .sidebar::-webkit-scrollbar { width: 4px; }
         .sidebar::-webkit-scrollbar-thumb { background: var(--primary-green); border-radius: 4px; }
 
-        .sidebar .brand {
-            text-align: center;
-            padding: 20px 15px 30px;
+.sidebar .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 16px;
             border-bottom: 1px solid rgba(255,255,255,0.05);
         }
 
-        .sidebar .brand .brand-icon {
+.sidebar .brand .brand-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
-            padding: 12px 15px;
-            border-radius: 14px;
-            font-size: 2rem;
-            display: inline-block;
-            margin-bottom: 10px;
-        }
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+         color: #fff;}
 
-        .sidebar .brand h4 {
+.sidebar .brand h4 {
+            font-size: 1.1rem;
             font-weight: 800;
             margin: 0;
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
@@ -290,7 +323,7 @@ $page_title = 'Paramètres - Administration PharmaGeo';
             display: block;
         }
 
-        .sidebar .nav-menu { padding: 20px 15px; }
+        .sidebar .nav-menu { padding: 20px 15px; flex: 1; }
 
         .sidebar .nav-menu .nav-label {
             font-size: 0.7rem;
@@ -325,7 +358,7 @@ $page_title = 'Paramètres - Administration PharmaGeo';
         }
 
         .sidebar .nav-menu .nav-item.active {
-            background: linear-gradient(135deg, rgba(42,195,42,0.2), rgba(200,120,30,0.2));
+            background: linear-gradient(135deg, rgba(22,163,74,0.2), rgba(21,128,61,0.2));
             color: var(--primary-green);
             border-left: 3px solid var(--primary-green);
         }
@@ -333,10 +366,6 @@ $page_title = 'Paramètres - Administration PharmaGeo';
         .sidebar .nav-menu .nav-item i { width: 20px; text-align: center; font-size: 1rem; }
 
         .sidebar .user-profile {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
             padding: 20px;
             border-top: 1px solid rgba(255,255,255,0.05);
             display: flex;
@@ -360,6 +389,10 @@ $page_title = 'Paramètres - Administration PharmaGeo';
         .sidebar .user-profile .user-info { flex: 1; }
         .sidebar .user-profile .user-info .name { font-weight: 600; font-size: 0.9rem; color: white; }
         .sidebar .user-profile .user-info .role { font-size: 0.7rem; color: rgba(255,255,255,0.4); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
 
         /* ===== MAIN CONTENT ===== */
         .main-content {
@@ -474,23 +507,23 @@ $page_title = 'Paramètres - Administration PharmaGeo';
         }
 
         .settings-card .card-header-custom .header-icon.green {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .settings-card .card-header-custom .header-icon.orange {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
         .settings-card .card-header-custom .header-icon.blue {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         .settings-card .card-header-custom .header-icon.purple {
             background: rgba(155,89,182,0.1);
-            color: #9b59b6;
+            color: #1F2937;
         }
 
         .settings-card .card-header-custom .header-title h5 {
@@ -516,7 +549,7 @@ $page_title = 'Paramètres - Administration PharmaGeo';
         }
 
         .form-modern .form-label .required {
-            color: #e74c3c;
+            color: #DC2626;
             margin-left: 2px;
         }
 
@@ -537,22 +570,22 @@ $page_title = 'Paramètres - Administration PharmaGeo';
 
         .form-modern .input-group-custom .form-control {
             padding: 12px 16px 12px 44px;
-            border: 2px solid #e8ecf1;
+            border: 2px solid #D9E9DF;
             border-radius: 14px;
             font-size: 0.95rem;
             transition: var(--transition);
-            background: #f8f9fa;
+            background: #F0FDF4;
             color: var(--dark-text);
         }
 
         .form-modern .input-group-custom .form-control:focus {
             border-color: var(--primary-green);
-            box-shadow: 0 0 0 4px rgba(42,195,42,0.1);
+            box-shadow: 0 0 0 4px rgba(22,163,74,0.1);
             background: var(--white);
         }
 
         .form-modern .input-group-custom .form-control:disabled {
-            background: #f0f0f0;
+            background: #F0FDF4;
             cursor: not-allowed;
         }
 
@@ -591,7 +624,7 @@ $page_title = 'Paramètres - Administration PharmaGeo';
 
         .btn-primary-custom:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 40px rgba(42,195,42,0.4);
+            box-shadow: 0 12px 40px rgba(22,163,74,0.4);
             color: white;
         }
 
@@ -615,7 +648,7 @@ $page_title = 'Paramètres - Administration PharmaGeo';
         }
 
         .btn-danger-custom {
-            background: #e74c3c;
+            background: #DC2626;
             color: white;
             border: none;
             padding: 10px 24px;
@@ -625,9 +658,9 @@ $page_title = 'Paramètres - Administration PharmaGeo';
         }
 
         .btn-danger-custom:hover {
-            background: #c0392b;
+            background: #B91C1C;
             transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(231,76,60,0.3);
+            box-shadow: 0 8px 30px rgba(220,38,38,0.3);
             color: white;
         }
 
@@ -646,15 +679,15 @@ $page_title = 'Paramètres - Administration PharmaGeo';
         .alert-custom i { font-size: 1.2rem; margin-top: 2px; }
 
         .alert-custom-success {
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
             color: var(--primary-green);
             border-left: 4px solid var(--primary-green);
         }
 
         .alert-custom-danger {
-            background: rgba(231,76,60,0.08);
-            color: #e74c3c;
-            border-left: 4px solid #e74c3c;
+            background: rgba(220,38,38,0.08);
+            color: #DC2626;
+            border-left: 4px solid #DC2626;
         }
 
         /* ===== ADMIN PROFILE ===== */
@@ -816,7 +849,7 @@ $page_title = 'Paramètres - Administration PharmaGeo';
         .password-strength {
             height: 4px;
             border-radius: 4px;
-            background: #e8ecf1;
+            background: #D9E9DF;
             margin-top: 8px;
             overflow: hidden;
             transition: var(--transition);
@@ -829,9 +862,9 @@ $page_title = 'Paramètres - Administration PharmaGeo';
             transition: width 0.4s ease, background 0.4s ease;
         }
 
-        .password-strength .bar.weak { width: 25%; background: #e74c3c; }
-        .password-strength .bar.medium { width: 50%; background: #f39c12; }
-        .password-strength .bar.good { width: 75%; background: #2ecc71; }
+        .password-strength .bar.weak { width: 25%; background: #DC2626; }
+        .password-strength .bar.medium { width: 50%; background: #166534; }
+        .password-strength .bar.good { width: 75%; background: #16A34A; }
         .password-strength .bar.strong { width: 100%; background: var(--primary-green); }
 
         .password-strength-label {
@@ -865,9 +898,9 @@ $page_title = 'Paramètres - Administration PharmaGeo';
             display: block;
             font-size: 1rem;
             opacity: 1;
-        }
-    </style>
-    <link rel="stylesheet" href="../assets/css/responsive.css">
+        }    </style>
+    <link rel="stylesheet" href="../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -876,11 +909,10 @@ $page_title = 'Paramètres - Administration PharmaGeo';
 
     <!-- ===== SIDEBAR ===== -->
     <aside class="sidebar" id="sidebar">
-        <div class="brand">
+        <a href="<?php echo BASE_URL; ?>index.php" class="brand" style="text-decoration: none;">
             <div class="brand-icon"><i class="fas fa-hospital"></i></div>
-            <h4>PharmaGeo</h4>
-            <small>Administration</small>
-        </div>
+            <div><h4>PharmaGeo</h4><small>Administration</small></div>
+        </a>
 
         <nav class="nav-menu">
             <div class="nav-label">Navigation</div>
@@ -918,25 +950,32 @@ $page_title = 'Paramètres - Administration PharmaGeo';
             </a>
 
             <div class="nav-label" style="margin-top: 20px;">Mon compte</div>
-            <a href="<?php echo BASE_URL; ?>pages/patient/profil.php" class="nav-item">
+            <a href="<?php echo BASE_URL; ?>admin/profil.php" class="nav-item">
                 <i class="fas fa-user-edit"></i>
                 <span>Mon profil</span>
             </a>
-            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);">
-                <i class="fas fa-sign-out-alt"></i>
-                <span>Déconnexion</span>
-            </a>
+
         </nav>
 
-        <div class="user-profile">
+        <a class="user-profile" href="<?php echo BASE_URL; ?>admin/profil.php" title="Voir mon profil">
             <div class="avatar">
-                <?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?>
+                <?php if (!empty($_SESSION['photo']) && pharma_image_disponible($_SESSION['photo'])): ?>
+                    <img src="<?php echo htmlspecialchars(pharma_image_url($_SESSION['photo'])); ?>" alt="">
+                <?php else: ?>
+                    <?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?>
+                <?php endif; ?>
             </div>
             <div class="user-info">
                 <div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div>
-                <div class="role"><i class="fas fa-crown me-1" style="color: #f1c40f;"></i> Administrateur</div>
-            </div>
-        </div>
+                <div class="role"><i class="fas fa-crown me-1" style="color: #DC2626;"></i> Administrateur</div>
+            <i class="fas fa-chevron-right profile-chevron"></i>
+        </a>
+    
+    <?php require_once __DIR__ . '/../includes/reinitialiser.php'; echo html_bloc_reinitialiser(); ?>
+    <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.15); margin-top: auto; text-decoration: none;">
+        <i class="fas fa-sign-out-alt"></i>
+        <span>Déconnexion</span>
+    </a>
     </aside>
 
     <!-- ===== MAIN CONTENT ===== -->
@@ -984,11 +1023,10 @@ $page_title = 'Paramètres - Administration PharmaGeo';
                             <div>
                                 <h2 class="admin-name"><?php echo htmlspecialchars(($admin_info['Prenom'] ?? '') . ' ' . ($admin_info['Nom'] ?? '')); ?></h2>
                                 <p class="admin-role">
-                                    <i class="fas fa-crown me-1" style="color: #f1c40f;"></i>
+                                    <i class="fas fa-crown me-1" style="color: #DC2626;"></i>
                                     Administrateur Principal
                                 </p>
                                 <div class="dg-logo-container">
-                                    <div class="dg-icon">👔</div>
                                     <div class="dg-text">
                                         <strong>DG - Directeur Général</strong>
                                         <span>Plateforme PharmaGeo</span>
@@ -1172,11 +1210,21 @@ $page_title = 'Paramètres - Administration PharmaGeo';
                             </div>
                         </div>
 
+                        <?php $maintenance_active = maintenance_est_active(); ?>
                         <div class="form-group">
                             <label class="form-label">Mode maintenance</label>
+
+                            <?php if ($maintenance_active): ?>
+                            <div class="alert alert-warning py-2 px-3 mb-3" style="border-radius: 10px; font-size: 0.9rem;">
+                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                <strong>Mode maintenance ACTIF</strong> — la plateforme est actuellement
+                                inaccessible aux utilisateurs non-administrateurs.
+                            </div>
+                            <?php endif; ?>
+
                             <div class="switch-container">
                                 <label class="switch">
-                                    <input type="checkbox" name="maintenance_mode" <?php echo isset($_SESSION['maintenance_mode']) && $_SESSION['maintenance_mode'] ? 'checked' : ''; ?>>
+                                    <input type="checkbox" name="maintenance_mode" <?php echo $maintenance_active ? 'checked' : ''; ?>>
                                     <span class="slider"></span>
                                 </label>
                                 <span style="font-size: 0.9rem; color: var(--gray-text);">
@@ -1184,6 +1232,10 @@ $page_title = 'Paramètres - Administration PharmaGeo';
                                 </span>
                             </div>
                             <small class="text-muted">Lorsque le mode maintenance est activé, seuls les administrateurs peuvent accéder à la plateforme.</small>
+                            <br>
+                            <a href="<?php echo BASE_URL; ?>index.php?maintenance_preview=1" target="_blank" class="text-decoration-none" style="font-size: 0.85rem; color: var(--primary-green);">
+                                <i class="fas fa-eye"></i> Prévisualiser la page de maintenance
+                            </a>
                         </div>
 
                         <button type="submit" class="btn-primary-custom">
@@ -1216,7 +1268,7 @@ $page_title = 'Paramètres - Administration PharmaGeo';
                         <button class="btn-danger-custom" onclick="confirmAction('clear_cache')">
                             <i class="fas fa-trash-alt"></i> Vider le cache
                         </button>
-                        <button class="btn-danger-custom" onclick="confirmAction('reset')" style="background: #e74c3c;">
+                        <button class="btn-danger-custom" onclick="confirmAction('reset')" style="background: #DC2626;">
                             <i class="fas fa-exclamation-triangle"></i> Réinitialiser la plateforme
                         </button>
                     </div>
@@ -1260,14 +1312,14 @@ $page_title = 'Paramètres - Administration PharmaGeo';
                         </div>
                         <div class="col-md-3 col-6">
                             <div class="text-center p-3 bg-light rounded-3">
-                                <i class="fas fa-database" style="font-size: 2rem; color: #3498db;"></i>
+                                <i class="fas fa-database" style="font-size: 2rem; color: #166534;"></i>
                                 <h6 class="mt-2 mb-0">Base de données</h6>
                                 <small class="text-muted">MySQL</small>
                             </div>
                         </div>
                         <div class="col-md-3 col-6">
                             <div class="text-center p-3 bg-light rounded-3">
-                                <i class="fas fa-shield-alt" style="font-size: 2rem; color: #9b59b6;"></i>
+                                <i class="fas fa-shield-alt" style="font-size: 2rem; color: #1F2937;"></i>
                                 <h6 class="mt-2 mb-0">Sécurité</h6>
                                 <small class="text-muted">SSL activé</small>
                             </div>
@@ -1354,19 +1406,19 @@ $page_title = 'Paramètres - Administration PharmaGeo';
                     if (score <= 1) {
                         strengthBar.className = 'bar weak';
                         strengthLabel.textContent = '⚠️ Mot de passe faible';
-                        strengthLabel.style.color = '#e74c3c';
+                        strengthLabel.style.color = '#DC2626';
                     } else if (score === 2) {
                         strengthBar.className = 'bar medium';
                         strengthLabel.textContent = '⚠️ Mot de passe moyen';
-                        strengthLabel.style.color = '#f39c12';
+                        strengthLabel.style.color = '#DC2626';
                     } else if (score === 3) {
                         strengthBar.className = 'bar good';
                         strengthLabel.textContent = '✅ Mot de passe bon';
-                        strengthLabel.style.color = '#2ecc71';
+                        strengthLabel.style.color = '#16A34A';
                     } else {
                         strengthBar.className = 'bar strong';
                         strengthLabel.textContent = '✅ Mot de passe fort';
-                        strengthLabel.style.color = '#27ae60';
+                        strengthLabel.style.color = '#16A34A';
                     }
                 });
             }
@@ -1385,8 +1437,8 @@ $page_title = 'Paramètres - Administration PharmaGeo';
                         passwordMatch.innerHTML = '<i class="fas fa-check-circle" style="color: var(--primary-green);"></i> Les mots de passe correspondent';
                         passwordMatch.style.color = 'var(--primary-green)';
                     } else {
-                        passwordMatch.innerHTML = '<i class="fas fa-exclamation-circle" style="color: #e74c3c;"></i> Les mots de passe ne correspondent pas';
-                        passwordMatch.style.color = '#e74c3c';
+                        passwordMatch.innerHTML = '<i class="fas fa-exclamation-circle" style="color: #DC2626;"></i> Les mots de passe ne correspondent pas';
+                        passwordMatch.style.color = '#DC2626';
                     }
                 });
             }
@@ -1427,8 +1479,8 @@ $page_title = 'Paramètres - Administration PharmaGeo';
                     text: msg.text,
                     icon: msg.icon,
                     showCancelButton: true,
-                    confirmButtonColor: action === 'reset' ? '#e74c3c' : '#27ae60',
-                    cancelButtonColor: '#6c757d',
+                    confirmButtonColor: action === 'reset' ? '#DC2626' : '#16A34A',
+                    cancelButtonColor: '#64748B',
                     confirmButtonText: 'Confirmer',
                     cancelButtonText: 'Annuler'
                 }).then((result) => {
@@ -1445,7 +1497,7 @@ $page_title = 'Paramètres - Administration PharmaGeo';
                                 title: '✅ Action réussie',
                                 text: 'L\'opération a été effectuée avec succès.',
                                 icon: 'success',
-                                confirmButtonColor: '#27ae60',
+                                confirmButtonColor: '#16A34A',
                                 confirmButtonText: 'OK'
                             });
                         });
@@ -1466,8 +1518,7 @@ $page_title = 'Paramètres - Administration PharmaGeo';
             });
 
             // ===== CONSOLE LOG =====
-            console.log('%c PharmaGeo - Paramètres Administration ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
-            console.log('%c 👔 Directeur Général de la plateforme.', 'color: #666; font-size: 14px;');
+            console.log('%c PharmaGeo - Paramètres Administration ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
 
         });
     </script>

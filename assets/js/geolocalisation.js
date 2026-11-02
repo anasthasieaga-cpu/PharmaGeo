@@ -21,14 +21,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // Icône personnalisée pour les pharmacies
     const pharmacyIcon = L.divIcon({
         className: 'pharmacy-marker',
-        html: '<i class="fas fa-hospital" style="font-size: 2rem; color: rgb(42, 195, 42);"></i>',
+        html: '<i class="fas fa-hospital" style="font-size: 2rem; color: #16A34A;"></i>',
         iconSize: [30, 30],
         iconAnchor: [15, 30]
     });
     
     const pharmacyIconSelected = L.divIcon({
         className: 'pharmacy-marker-selected',
-        html: '<i class="fas fa-hospital" style="font-size: 2.5rem; color: hsl(25, 75%, 47%);"></i>',
+        html: '<i class="fas fa-hospital" style="font-size: 2.5rem; color: #166534;"></i>',
         iconSize: [35, 35],
         iconAnchor: [17, 35]
     });
@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 userMarker = L.marker([lat, lng], {
                     icon: L.divIcon({
                         className: 'user-marker',
-                        html: '<i class="fas fa-user-circle" style="font-size: 2.5rem; color: #3498db;"></i>',
+                        html: '<i class="fas fa-user-circle" style="font-size: 2.5rem; color: #166534;"></i>',
                         iconSize: [35, 35],
                         iconAnchor: [17, 35]
                     })
@@ -65,8 +65,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 userCircle = L.circle([lat, lng], {
                     radius: 100,
-                    color: '#3498db',
-                    fillColor: '#3498db',
+                    color: '#166534',
+                    fillColor: '#166534',
                     fillOpacity: 0.1
                 }).addTo(map);
                 
@@ -125,11 +125,11 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const popupContent = `
                 <div class="pharmacy-popup">
-                    <h5 class="fw-bold" style="color: rgb(42, 195, 42);">
+                    <h5 class="fw-bold" style="color: #16A34A;">
                         <i class="fas fa-store"></i> ${pharmacy.Nom}
                     </h5>
                     <p class="mb-1">
-                        <i class="fas fa-map-marker-alt" style="color: hsl(25, 75%, 47%);"></i>
+                        <i class="fas fa-map-marker-alt" style="color: #166534;"></i>
                         ${pharmacy.Quartier || ''}, ${pharmacy.Commune || 'Porto-Novo'}
                     </p>
                     <p class="mb-1">
@@ -138,7 +138,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <p class="mb-1">
                         <i class="fas fa-clock"></i> ${pharmacy.Horaire || 'Horaires non renseignés'}
                     </p>
-                    ${pharmacy.Distance ? `<p class="mb-1"><i class="fas fa-route" style="color: rgb(42, 195, 42);"></i> ${formatDistance(pharmacy.Distance)}</p>` : ''}
+                    ${pharmacy.Distance ? `<p class="mb-1"><i class="fas fa-route" style="color: #16A34A;"></i> ${formatDistance(pharmacy.Distance)}</p>` : ''}
                     <div class="mt-2">
                         <a href="${window.BASE_URL}pages/patient/pharmacie.php?id=${pharmacy.Id_pharmacie}" 
                            class="btn btn-primary-custom btn-sm">

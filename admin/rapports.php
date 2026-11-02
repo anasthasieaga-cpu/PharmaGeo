@@ -11,6 +11,9 @@ ini_set('display_errors', 1);
 // ===== DÉFINITION DES CONSTANTES =====
 define('BASE_URL', 'http://localhost/pharmageo/');
 
+// ===== GESTION DES IMAGES (photos de profil) =====
+require_once __DIR__ . '/../includes/images.php';
+
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
     $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
@@ -181,15 +184,22 @@ $page_title = 'Rapports - PharmaGeo';
     <link rel="stylesheet" href="../assets/css/style.css">
     <style>
         /* ===== VARIABLES ===== */
-        :root { --primary-green: #2ac32a; --primary-orange: #d4880f; --dark-text: #0a1628; --gray-text: #64748b; }
+        :root { --primary-green: #16A34A; --primary-orange: #B91C1C; --dark-text: #0F2E19; --gray-text: #64748b; }
         * { box-sizing: border-box; }
-        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #f0f3f2; margin: 0; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #F0FDF4; margin: 0; }
         .layout { display: flex; min-height: 100vh; }
         /* ===== SIDEBAR ===== */
-        .sidebar-admin { width: 250px; background: linear-gradient(180deg, #0c1f14, #143a1c); color: #fff; flex-shrink: 0; display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; left: 0; overflow-y: auto; z-index: 100; }
+        .sidebar-admin { width: 250px; background: linear-gradient(180deg, #0F2E19, #14532D); color: #fff; flex-shrink: 0; display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; left: 0; overflow-y: auto; z-index: 100; }
         .brand-admin { padding: 22px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; }
-        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; }
+        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center;  color: #fff;}
+        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; 
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: #fff;
+        }
+        
         .brand-admin small { color: rgba(255,255,255,0.6); display: block; }
         .nav-menu { padding: 16px 12px; flex: 1; }
         .nav-label { color: rgba(255,255,255,0.4); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; padding: 12px 12px 6px; }
@@ -201,6 +211,10 @@ $page_title = 'Rapports - PharmaGeo';
         .user-profile .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; font-weight: 800; }
         .user-profile .name { font-size: 0.9rem; font-weight: 600; }
         .user-profile .role { font-size: 0.75rem; color: rgba(255,255,255,0.6); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
         /* ===== CONTENU PRINCIPAL ===== */
         .main-content { flex: 1; margin-left: 250px; padding: 24px; }
         .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
@@ -215,24 +229,24 @@ $page_title = 'Rapports - PharmaGeo';
         .card-admin h5 { font-weight: 700; color: var(--dark-text); margin-bottom: 16px; }
         /* ===== SÉLECTEUR DE PÉRIODE ===== */
         .periode-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
-        .periode-btn { padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 0.9rem; color: var(--dark-text); background: #fff; border: 1px solid #e6ebe9; }
+        .periode-btn { padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 0.9rem; color: var(--dark-text); background: #fff; border: 1px solid #D9E9DF; }
         .periode-btn.active { background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); color: #fff; font-weight: 600; border: none; }
         /* ===== TABLEAU ===== */
         .table { margin: 0; }
-        .table thead th { background: #f8faf9; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray-text); border-bottom: 1px solid #eef1f0; padding: 12px; white-space: nowrap; }
-        .table tbody td { padding: 12px; vertical-align: middle; font-size: 0.9rem; border-color: #eef1f0; }
-        @media (max-width: 991px) { .sidebar-admin { transform: translateX(-100%); } .main-content { margin-left: 0; } .stats-grid { grid-template-columns: repeat(2, 1fr); } }
-    </style>
-    <link rel="stylesheet" href="../assets/css/responsive.css">
+        .table thead th { background: #F0FDF4; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray-text); border-bottom: 1px solid #F0FDF4; padding: 12px; white-space: nowrap; }
+        .table tbody td { padding: 12px; vertical-align: middle; font-size: 0.9rem; border-color: #F0FDF4; }
+        @media (max-width: 991px) { .sidebar-admin { transform: translateX(-100%); } .main-content { margin-left: 0; } .stats-grid { grid-template-columns: repeat(2, 1fr); } }    </style>
+    <link rel="stylesheet" href="../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
     <div class="layout">
         <!-- ===== SIDEBAR ===== -->
         <aside class="sidebar-admin">
-            <div class="brand-admin">
+            <a href="<?php echo BASE_URL; ?>index.php" class="brand-admin" style="text-decoration: none;">
                 <div class="brand-icon"><i class="fas fa-hospital"></i></div>
                 <div><h4>PharmaGeo</h4><small>Administration</small></div>
-            </div>
+            </a>
             <nav class="nav-menu">
                 <div class="nav-label">Navigation</div>
                 <a href="<?php echo BASE_URL; ?>admin/dashboard.php" class="nav-item"><i class="fas fa-tachometer-alt"></i><span>Tableau de bord</span></a>
@@ -247,13 +261,19 @@ $page_title = 'Rapports - PharmaGeo';
                 <a href="<?php echo BASE_URL; ?>admin/validation.php" class="nav-item"><i class="fas fa-check-double"></i><span>Validation</span></a>
                 <div class="nav-label" style="margin-top: 20px;">Système</div>
                 <a href="<?php echo BASE_URL; ?>admin/parametres.php" class="nav-item"><i class="fas fa-cog"></i><span>Paramètres</span></a>
-                <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
+
             </nav>
-            <div class="user-profile">
-                <div class="avatar"><?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?></div>
-                <div><div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div><div class="role"><i class="fas fa-crown me-1" style="color:#f1c40f;"></i> Administrateur</div></div>
-            </div>
-        </aside>
+            <a class="user-profile" href="<?php echo BASE_URL; ?>admin/profil.php" title="Voir mon profil">
+                <div class="avatar"><?php if (!empty($_SESSION['photo']) && pharma_image_disponible($_SESSION['photo'])): ?><img src="<?php echo htmlspecialchars(pharma_image_url($_SESSION['photo'])); ?>" alt=""><?php else: ?><?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?><?php endif; ?></div>
+                <i class="fas fa-chevron-right profile-chevron"></i>
+            </a>
+        
+    <?php require_once __DIR__ . '/../includes/reinitialiser.php'; echo html_bloc_reinitialiser(); ?>
+    <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; padding: 14px 20px; border-top: 1px solid rgba(255,255,255,0.15); margin-top: auto; text-decoration: none;">
+        <i class="fas fa-sign-out-alt"></i>
+        <span>Déconnexion</span>
+    </a>
+    </aside>
 
         <main class="main-content">
             <!-- ===== TOP BAR ===== -->
@@ -290,7 +310,7 @@ $page_title = 'Rapports - PharmaGeo';
             <div class="stats-grid">
                 <div class="stat-mini"><div class="num" style="color:var(--primary-green);"><?php echo $stats['reservations']; ?></div><div class="lbl"><i class="fas fa-calendar-check me-1"></i>Réservations</div></div>
                 <div class="stat-mini"><div class="num" style="color:var(--primary-orange);"><?php echo $stats['reservations_confirmees']; ?></div><div class="lbl"><i class="fas fa-check-circle me-1"></i>Confirmées</div></div>
-                <div class="stat-mini"><div class="num" style="color:#3498db;"><?php echo $stats['recherches_total']; ?></div><div class="lbl"><i class="fas fa-search me-1"></i>Recherches</div></div>
+                <div class="stat-mini"><div class="num" style="color:#166534;"><?php echo $stats['recherches_total']; ?></div><div class="lbl"><i class="fas fa-search me-1"></i>Recherches</div></div>
                 <div class="stat-mini"><div class="num"><?php echo $stats['inscriptions']; ?></div><div class="lbl"><i class="fas fa-user-plus me-1"></i>Inscriptions</div></div>
             </div>
 
@@ -375,8 +395,8 @@ $page_title = 'Rapports - PharmaGeo';
                 data: {
                     labels: evolData.map(r => r.jour),
                     datasets: [
-                        { label: 'Réservations', data: evolData.map(r => r.total), borderColor: '#2ac32a', backgroundColor: 'rgba(42,195,42,0.1)', fill: true, tension: 0.3 },
-                        { label: 'Confirmées', data: evolData.map(r => r.confirmees), borderColor: '#d4880f', tension: 0.3 }
+                        { label: 'Réservations', data: evolData.map(r => r.total), borderColor: '#16A34A', backgroundColor: 'rgba(22,163,74,0.1)', fill: true, tension: 0.3 },
+                        { label: 'Confirmées', data: evolData.map(r => r.confirmees), borderColor: '#B91C1C', tension: 0.3 }
                     ]
                 },
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
@@ -393,7 +413,7 @@ $page_title = 'Rapports - PharmaGeo';
                     labels: repartData.map(r => r.Statut),
                     datasets: [{
                         data: repartData.map(r => r.total),
-                        backgroundColor: ['#2ac32a', '#d4880f', '#e74c3c', '#3498db', '#9b59b6', '#95a5a6']
+                        backgroundColor: ['#16A34A', '#B91C1C', '#DC2626', '#166534', '#1F2937', '#64748B']
                     }]
                 },
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }

@@ -12,6 +12,9 @@ ini_set('display_errors', 1);
 // ===== DÉFINITION DES CONSTANTES =====
 define('BASE_URL', 'http://localhost/pharmageo/');
 
+// ===== FONCTIONS UTILITAIRES =====
+require_once __DIR__ . '/../includes/fonctions.php';
+
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
     $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
@@ -80,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     
     // Vérifier si l'email est déjà utilisé par un autre utilisateur
     if (empty($errors) && $email !== $user['Email']) {
-        $check = $pdo->prepare("SELECT COUNT(*) as total FROM utilisateur WHERE Email = :email AND Id_utilisateur != :id");
+        $check = $pdo->prepare("SELECT COUNT(*) as total FROM utilisateur WHERE LOWER(Email) = LOWER(:email) AND Id_utilisateur != :id");
         $check->execute([':email' => $email, ':id' => $_SESSION['user_id']]);
         if ($check->fetch()['total'] > 0) {
             $errors[] = "Cet email est déjà utilisé par un autre compte.";
@@ -186,6 +189,107 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 }
 
+// ===== PHOTO DE PROFIL DU PHARMACIEN =====
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'upload_photo_pharmacien') {
+    if (!isset($_FILES['photo_pharmacien']) || ($_FILES['photo_pharmacien']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        $error = "Veuillez sélectionner une image.";
+    } else {
+        try {
+            $nouvelle = pharma_upload_image($_FILES['photo_pharmacien'], 'photos', 'pharmacien_' . $_SESSION['user_id']);
+            $ancienne = $user['Photo'] ?? null;
+
+            $pdo->prepare("UPDATE utilisateur SET Photo = :photo WHERE Id_utilisateur = :id")
+                ->execute([':photo' => $nouvelle, ':id' => $_SESSION['user_id']]);
+
+            // Remplace l'ancienne image pour ne pas accumuler de fichiers orphelins.
+            if (!empty($ancienne) && $ancienne !== $nouvelle) {
+                pharma_supprimer_image($ancienne);
+            }
+
+            $_SESSION['photo'] = $nouvelle;
+            $user['Photo'] = $nouvelle;
+            $success = "Photo de profil mise à jour avec succès !";
+
+            $log = $pdo->prepare("INSERT INTO log (Action, Adresse_ip, Navigateur, Resultat, Id_utilisateur)
+                                  VALUES ('Mise à jour photo de profil pharmacien', :ip, :ua, 'succes', :user)");
+            $log->execute([
+                ':ip' => $_SERVER['REMOTE_ADDR'] ?? '',
+                ':ua' => $_SERVER['HTTP_USER_AGENT'] ?? '',
+                ':user' => $_SESSION['user_id']
+            ]);
+        } catch (RuntimeException $e) {
+            $error = $e->getMessage();
+        } catch (PDOException $e) {
+            $error = "Erreur lors de l'enregistrement de la photo.";
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_photo_pharmacien') {
+    try {
+        $ancienne = $user['Photo'] ?? null;
+        $pdo->prepare("UPDATE utilisateur SET Photo = NULL WHERE Id_utilisateur = :id")
+            ->execute([':id' => $_SESSION['user_id']]);
+        if (!empty($ancienne)) {
+            pharma_supprimer_image($ancienne);
+        }
+        unset($_SESSION['photo']);
+        $user['Photo'] = null;
+        $success = "Photo de profil supprimée.";
+    } catch (PDOException $e) {
+        $error = "Erreur lors de la suppression de la photo.";
+    }
+}
+
+// ===== PHOTO DE LA PHARMACIE =====
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'upload_photo_pharmacie' && $has_pharmacy) {
+    if (!isset($_FILES['photo_pharmacie']) || ($_FILES['photo_pharmacie']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        $error = "Veuillez sélectionner une image.";
+    } else {
+        try {
+            $nouvelle = pharma_upload_image($_FILES['photo_pharmacie'], 'logos', 'pharmacie_' . $user['Id_pharmacie']);
+            $ancienne = $user['Logo'] ?? null;
+
+            $pdo->prepare("UPDATE pharmacie SET Logo = :logo WHERE Id_pharmacie = :id")
+                ->execute([':logo' => $nouvelle, ':id' => $user['Id_pharmacie']]);
+
+            if (!empty($ancienne) && $ancienne !== $nouvelle) {
+                pharma_supprimer_image($ancienne);
+            }
+
+            $user['Logo'] = $nouvelle;
+            $success = "Photo de la pharmacie mise à jour avec succès !";
+
+            $log = $pdo->prepare("INSERT INTO log (Action, Adresse_ip, Navigateur, Resultat, Id_utilisateur)
+                                  VALUES ('Mise à jour photo de la pharmacie', :ip, :ua, 'succes', :user)");
+            $log->execute([
+                ':ip' => $_SERVER['REMOTE_ADDR'] ?? '',
+                ':ua' => $_SERVER['HTTP_USER_AGENT'] ?? '',
+                ':user' => $_SESSION['user_id']
+            ]);
+        } catch (RuntimeException $e) {
+            $error = $e->getMessage();
+        } catch (PDOException $e) {
+            $error = "Erreur lors de l'enregistrement de la photo.";
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_photo_pharmacie' && $has_pharmacy) {
+    try {
+        $ancienne = $user['Logo'] ?? null;
+        $pdo->prepare("UPDATE pharmacie SET Logo = NULL WHERE Id_pharmacie = :id")
+            ->execute([':id' => $user['Id_pharmacie']]);
+        if (!empty($ancienne)) {
+            pharma_supprimer_image($ancienne);
+        }
+        $user['Logo'] = null;
+        $success = "Photo de la pharmacie supprimée.";
+    } catch (PDOException $e) {
+        $error = "Erreur lors de la suppression de la photo.";
+    }
+}
+
 // ===== RÉCUPÉRATION DES STATISTIQUES (CORRIGÉ) =====
 try {
     // Total des réservations
@@ -224,6 +328,12 @@ try {
     $stats = ['reservations' => 0, 'medicaments' => 0, 'en_attente' => 0];
 }
 
+// ===== PHOTOS =====
+$photo_pharmacien = $user['Photo'] ?? null;
+$photo_pharmacie = $user['Logo'] ?? null;
+$photo_pharmacien_dispo = pharma_image_disponible($photo_pharmacien);
+$photo_pharmacie_dispo = $has_pharmacy && pharma_image_disponible($photo_pharmacie);
+
 $page_title = 'Mon profil - PharmaGeo';
 ?>
 <!DOCTYPE html>
@@ -248,18 +358,18 @@ $page_title = 'Mon profil - PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --light-bg: #f0f2f5;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --light-bg: #F0FDF4;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-sm: 0 2px 20px rgba(0,0,0,0.04);
             --shadow-md: 0 8px 40px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
             --shadow-xl: 0 30px 80px rgba(0,0,0,0.16);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
-            --shadow-glow-orange: 0 8px 40px rgba(200, 120, 30, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
+            --shadow-glow-orange: 0 8px 40px rgba(21,128,61, 0.20);
             --radius: 16px;
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -352,7 +462,7 @@ $page_title = 'Mon profil - PharmaGeo';
         .nav-link-custom:hover,
         .nav-link-custom.active {
             color: var(--primary-green);
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
         }
 
         .nav-link-custom::after {
@@ -374,32 +484,39 @@ $page_title = 'Mon profil - PharmaGeo';
         }
 
         .btn-nav-logout {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            background: linear-gradient(135deg, #DC2626, #B91C1C);
             color: white !important;
             padding: 8px 24px !important;
             border-radius: 50px !important;
             font-weight: 600;
             transition: var(--transition);
             border: none;
-            box-shadow: 0 4px 15px rgba(231,76,60,0.2);
+            box-shadow: 0 4px 15px rgba(220,38,38,0.2);
         }
 
         .btn-nav-logout:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(231,76,60,0.35);
+            box-shadow: 0 8px 30px rgba(220,38,38,0.35);
             color: white !important;
         }
 
         /* ===== LAYOUT / SIDEBAR ===== */
         .layout { display: flex; min-height: 100vh; }
         .sidebar-admin {
-            width: 250px; background: linear-gradient(180deg, #0c1f14, #143a1c);
+            width: 250px; background: linear-gradient(180deg, #0F2E19, #14532D);
             color: #fff; flex-shrink: 0; display: flex; flex-direction: column;
             position: fixed; top: 0; bottom: 0; left: 0; overflow-y: auto; z-index: 100;
         }
         .brand-admin { padding: 22px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; }
-        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; }
+        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center;  color: #fff;}
+        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; 
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: #fff;
+        }
+        
         .brand-admin small { color: rgba(255,255,255,0.6); display: block; }
         .nav-menu { padding: 16px 12px; flex: 1; }
         .nav-label { color: rgba(255,255,255,0.4); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; padding: 12px 12px 6px; }
@@ -411,6 +528,10 @@ $page_title = 'Mon profil - PharmaGeo';
         .user-profile .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; font-weight: 800; }
         .user-profile .name { font-size: 0.9rem; font-weight: 600; }
         .user-profile .role { font-size: 0.75rem; color: rgba(255,255,255,0.6); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
         @media (max-width: 991px) {
             .sidebar-admin { position: fixed; transform: translateX(-100%); transition: transform 0.3s ease; }
             .sidebar-admin.open { transform: translateX(0); }
@@ -482,6 +603,84 @@ $page_title = 'Mon profil - PharmaGeo';
             margin: 0 auto 16px;
             box-shadow: var(--shadow-glow-green);
             border: 4px solid var(--white);
+            overflow: hidden;
+        }
+
+        .profile-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+        /* ===== GESTION DES PHOTOS ===== */
+        .photo-widget {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+            padding: 16px;
+            border: 1px dashed #CBE7D6;
+            border-radius: var(--radius);
+            background: #FAFFFC;
+            margin-bottom: 18px;
+        }
+        .photo-widget__preview {
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            overflow: hidden;
+            flex-shrink: 0;
+            border: 3px solid #fff;
+            box-shadow: var(--shadow-sm);
+            background: #F0FDF4;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .photo-widget__preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .photo-widget--pharmacie .photo-widget__preview { border-radius: 18px; }
+        .photo-widget__body { flex: 1; min-width: 220px; }
+        .photo-widget__body h6 { font-weight: 800; margin-bottom: 2px; }
+        .photo-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+        .photo-file {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 16px;
+            border-radius: 50px;
+            border: 1px solid var(--primary-green);
+            color: var(--primary-green);
+            background: #fff;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+            transition: var(--transition);
+            margin: 0;
+        }
+        .photo-file:hover { background: rgba(22,163,74,0.08); }
+        .photo-file input[type=file] { display: none; }
+        .btn-photo {
+            border: none;
+            padding: 9px 16px;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+            transition: var(--transition);
+        }
+        .btn-photo--primary { background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); color: #fff; }
+        .btn-photo--primary:hover { transform: translateY(-2px); color: #fff; }
+        .btn-photo--danger { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; }
+        .btn-photo--danger:disabled { opacity: 0.45; cursor: not-allowed; }
+        .photo-hint { font-size: 0.78rem; color: var(--gray-text); display: block; margin-top: 6px; }
+        .pharmacy-info-card .pharmacy-photo {
+            width: 100%;
+            max-height: 150px;
+            object-fit: cover;
+            border-radius: 14px;
+            margin-bottom: 14px;
+            display: block;
+            border: 1px solid rgba(0,0,0,0.04);
         }
 
         .profile-name {
@@ -507,18 +706,18 @@ $page_title = 'Mon profil - PharmaGeo';
         }
 
         .profile-badge.valide {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .profile-badge.en_attente {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
         .profile-badge.rejete {
-            background: rgba(231,76,60,0.1);
-            color: #e74c3c;
+            background: rgba(220,38,38,0.1);
+            color: #DC2626;
         }
 
         .profile-stats {
@@ -526,7 +725,7 @@ $page_title = 'Mon profil - PharmaGeo';
             grid-template-columns: repeat(3, 1fr);
             gap: 12px;
             padding-top: 16px;
-            border-top: 1px solid #f0f0f0;
+            border-top: 1px solid #F0FDF4;
         }
 
         .profile-stats .stat-item {
@@ -580,12 +779,12 @@ $page_title = 'Mon profil - PharmaGeo';
         }
 
         .settings-card .card-header-custom .header-icon.green {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .settings-card .card-header-custom .header-icon.orange {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
@@ -612,7 +811,7 @@ $page_title = 'Mon profil - PharmaGeo';
         }
 
         .form-modern .form-label .required {
-            color: #e74c3c;
+            color: #DC2626;
             margin-left: 2px;
         }
 
@@ -633,17 +832,17 @@ $page_title = 'Mon profil - PharmaGeo';
 
         .form-modern .input-group-custom .form-control {
             padding: 12px 16px 12px 44px;
-            border: 2px solid #e8ecf1;
+            border: 2px solid #D9E9DF;
             border-radius: 14px;
             font-size: 0.95rem;
             transition: var(--transition);
-            background: #f8f9fa;
+            background: #F0FDF4;
             color: var(--dark-text);
         }
 
         .form-modern .input-group-custom .form-control:focus {
             border-color: var(--primary-green);
-            box-shadow: 0 0 0 4px rgba(42,195,42,0.1);
+            box-shadow: 0 0 0 4px rgba(22,163,74,0.1);
             background: var(--white);
         }
 
@@ -682,28 +881,11 @@ $page_title = 'Mon profil - PharmaGeo';
 
         .btn-primary-custom:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 40px rgba(42,195,42,0.4);
+            box-shadow: 0 12px 40px rgba(22,163,74,0.4);
             color: white;
         }
 
         .btn-primary-custom:active { transform: scale(0.98); }
-
-        .btn-danger-custom {
-            background: #e74c3c;
-            color: white;
-            border: none;
-            padding: 10px 24px;
-            border-radius: 50px;
-            font-weight: 600;
-            transition: var(--transition);
-        }
-
-        .btn-danger-custom:hover {
-            background: #c0392b;
-            transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(231,76,60,0.3);
-            color: white;
-        }
 
         /* ===== ALERTES ===== */
         .alert-custom {
@@ -720,22 +902,22 @@ $page_title = 'Mon profil - PharmaGeo';
         .alert-custom i { font-size: 1.2rem; margin-top: 2px; }
 
         .alert-custom-success {
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
             color: var(--primary-green);
             border-left: 4px solid var(--primary-green);
         }
 
         .alert-custom-danger {
-            background: rgba(231,76,60,0.08);
-            color: #e74c3c;
-            border-left: 4px solid #e74c3c;
+            background: rgba(220,38,38,0.08);
+            color: #DC2626;
+            border-left: 4px solid #DC2626;
         }
 
         /* ===== PASSWORD STRENGTH ===== */
         .password-strength {
             height: 4px;
             border-radius: 4px;
-            background: #e8ecf1;
+            background: #D9E9DF;
             margin-top: 8px;
             overflow: hidden;
             transition: var(--transition);
@@ -748,9 +930,9 @@ $page_title = 'Mon profil - PharmaGeo';
             transition: width 0.4s ease, background 0.4s ease;
         }
 
-        .password-strength .bar.weak { width: 25%; background: #e74c3c; }
-        .password-strength .bar.medium { width: 50%; background: #f39c12; }
-        .password-strength .bar.good { width: 75%; background: #2ecc71; }
+        .password-strength .bar.weak { width: 25%; background: #DC2626; }
+        .password-strength .bar.medium { width: 50%; background: #166534; }
+        .password-strength .bar.good { width: 75%; background: #16A34A; }
         .password-strength .bar.strong { width: 100%; background: var(--primary-green); }
 
         .password-strength-label {
@@ -813,7 +995,8 @@ $page_title = 'Mon profil - PharmaGeo';
             .navbar-brand-custom { font-size: 1.3rem; }
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/responsive.css">
+    <link rel="stylesheet" href="../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -821,10 +1004,10 @@ $page_title = 'Mon profil - PharmaGeo';
 
     <!-- ===== SIDEBAR ===== -->
     <aside class="sidebar-admin" id="sidebar">
-        <div class="brand-admin">
+        <a href="<?php echo BASE_URL; ?>index.php" class="brand-admin" style="text-decoration: none;">
             <div class="brand-icon"><i class="fas fa-hospital"></i></div>
-            <div><h4>PharmaGeo</h4><small>Pharmacien</small></div>
-        </div>
+            <div><h4>PharmaGeo</h4><small><?php echo htmlspecialchars(pharma_libelle_role('pharmacien', $user['Prenom'] ?? '')); ?></small></div>
+        </a>
         <nav class="nav-menu">
             <div class="nav-label">Navigation</div>
             <a href="<?php echo BASE_URL; ?>pharmacien/dashboard.php" class="nav-item"><i class="fas fa-tachometer-alt"></i><span>Tableau de bord</span></a>
@@ -836,15 +1019,17 @@ $page_title = 'Mon profil - PharmaGeo';
             <a href="<?php echo BASE_URL; ?>pharmacien/statistiques.php" class="nav-item"><i class="fas fa-chart-bar"></i><span>Statistiques</span></a>
             <a href="<?php echo BASE_URL; ?>pharmacien/profil.php" class="nav-item active"><i class="fas fa-user"></i><span>Profil</span></a>
             <div class="nav-label" style="margin-top: 20px;">Système</div>
-            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
+            <?php require_once __DIR__ . '/../includes/reinitialiser.php'; echo html_bloc_reinitialiser(); ?>
+            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.15); margin-bottom: 12px;"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
         </nav>
-        <div class="user-profile">
-            <div class="avatar"><?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?></div>
+        <a class="user-profile" href="<?php echo BASE_URL; ?>pharmacien/profil.php" aria-current="page">
+            <div class="avatar"><?php if (!empty($_SESSION['photo']) && function_exists('pharma_image_disponible') && pharma_image_disponible($_SESSION['photo'])): ?><img src="<?php echo htmlspecialchars(pharma_image_url($_SESSION['photo'])); ?>" alt=""><?php else: ?><?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?><?php endif; ?></div>
             <div>
                 <div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div>
-                <div class="role"><i class="fas fa-user-md me-1" style="color:#f1c40f;"></i> Pharmacien</div>
+                <div class="role"><i class="fas fa-user-md me-1" style="color:#DC2626;"></i> <?php echo htmlspecialchars(pharma_libelle_role('pharmacien', $user['Prenom'] ?? '')); ?></div>
             </div>
-        </div>
+            <i class="fas fa-chevron-right profile-chevron"></i>
+        </a>
     </aside>
 
     <!-- ===== MAIN CONTENT ===== -->
@@ -882,7 +1067,8 @@ $page_title = 'Mon profil - PharmaGeo';
             <div class="col-lg-4 animate-fade-up delay-1">
                 <div class="profile-card">
                     <div class="profile-avatar">
-                        <?php echo strtoupper(substr($user['Prenom'] ?? 'P', 0, 1) . substr($user['Nom'] ?? 'P', 0, 1)); ?>
+                        <img src="<?php echo htmlspecialchars(pharma_image_url_ou_defaut($user['Photo'] ?? null, 'pharmacien')); ?>"
+                             alt="Photo de <?php echo htmlspecialchars($user['Prenom'] . ' ' . $user['Nom']); ?>">
                     </div>
                     <div class="profile-name">
                         <?php echo htmlspecialchars($user['Prenom'] . ' ' . $user['Nom']); ?>
@@ -910,7 +1096,7 @@ $page_title = 'Mon profil - PharmaGeo';
                             <span class="label">Réservations</span>
                         </div>
                         <div class="stat-item">
-                            <span class="number" style="color: #3498db;"><?php echo $stats['medicaments']; ?></span>
+                            <span class="number" style="color: #166534;"><?php echo $stats['medicaments']; ?></span>
                             <span class="label">Médicaments</span>
                         </div>
                         <div class="stat-item">
@@ -922,6 +1108,9 @@ $page_title = 'Mon profil - PharmaGeo';
                     <!-- Informations pharmacie -->
                     <?php if ($has_pharmacy): ?>
                         <div class="pharmacy-info-card">
+                            <img class="pharmacy-photo"
+                                 src="<?php echo htmlspecialchars(pharma_image_url_ou_defaut($user['Logo'] ?? null, 'pharmacie')); ?>"
+                                 alt="Photo de <?php echo htmlspecialchars($user['Pharmacie_Nom']); ?>">
                             <div class="pharmacy-name">
                                 <i class="fas fa-store me-2"></i>
                                 <?php echo htmlspecialchars($user['Pharmacie_Nom']); ?>
@@ -961,7 +1150,7 @@ $page_title = 'Mon profil - PharmaGeo';
                         </div>
                     <?php endif; ?>
 
-                    <div class="mt-3 pt-3 text-center" style="border-top: 1px solid #f0f0f0;">
+                    <div class="mt-3 pt-3 text-center" style="border-top: 1px solid #F0FDF4;">
                         <small class="text-muted">
                             <i class="fas fa-calendar-alt me-1"></i>
                             Membre depuis le <?php echo date('d/m/Y', strtotime($user['Date_creation'])); ?>
@@ -972,6 +1161,91 @@ $page_title = 'Mon profil - PharmaGeo';
 
             <!-- ===== COLONNE DROITE - FORMULAIRES ===== -->
             <div class="col-lg-8">
+
+                <!-- ===== SECTION PHOTOS ===== -->
+                <div class="settings-card animate-fade-up delay-2">
+                    <div class="card-header-custom">
+                        <div class="header-icon green">
+                            <i class="fas fa-camera"></i>
+                        </div>
+                        <div class="header-title">
+                            <h5>Photos</h5>
+                            <p>Personnalisez votre profil et votre établissement</p>
+                        </div>
+                    </div>
+
+                    <!-- Photo du pharmacien -->
+                    <div class="photo-widget">
+                        <div class="photo-widget__preview">
+                            <img id="previewPhotoPharmacien"
+                                 src="<?php echo htmlspecialchars(pharma_image_url_ou_defaut($photo_pharmacien, 'pharmacien')); ?>"
+                                 alt="Photo de profil">
+                        </div>
+                        <div class="photo-widget__body">
+                            <h6><i class="fas fa-user-circle me-1" style="color: var(--primary-green);"></i>Photo du pharmacien</h6>
+                            <span class="photo-hint">JPG, PNG ou WebP — 2 Mo maximum.</span>
+                            <form method="POST" enctype="multipart/form-data">
+                                <input type="hidden" name="action" value="upload_photo_pharmacien">
+                                <div class="photo-actions">
+                                    <label class="photo-file" for="photo_pharmacien">
+                                        <i class="fas fa-camera"></i> Choisir une image
+                                        <input type="file" id="photo_pharmacien" name="photo_pharmacien"
+                                               accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                                               data-preview="previewPhotoPharmacien">
+                                    </label>
+                                    <button type="submit" class="btn-photo btn-photo--primary">
+                                        <i class="fas fa-upload"></i> <?php echo $photo_pharmacien_dispo ? 'Remplacer' : 'Ajouter'; ?>
+                                    </button>
+                                </div>
+                            </form>
+                            <form method="POST" onsubmit="return confirm('Supprimer votre photo de profil ?');">
+                                <input type="hidden" name="action" value="delete_photo_pharmacien">
+                                <div class="photo-actions">
+                                    <button type="submit" class="btn-photo btn-photo--danger" <?php echo $photo_pharmacien_dispo ? '' : 'disabled'; ?>>
+                                        <i class="fas fa-trash"></i> Supprimer
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <?php if ($has_pharmacy): ?>
+                    <!-- Photo de la pharmacie -->
+                    <div class="photo-widget photo-widget--pharmacie">
+                        <div class="photo-widget__preview">
+                            <img id="previewPhotoPharmacie"
+                                 src="<?php echo htmlspecialchars(pharma_image_url_ou_defaut($photo_pharmacie, 'pharmacie')); ?>"
+                                 alt="Photo de la pharmacie">
+                        </div>
+                        <div class="photo-widget__body">
+                            <h6><i class="fas fa-store me-1" style="color: var(--primary-green);"></i>Photo de la pharmacie</h6>
+                            <span class="photo-hint">JPG, PNG ou WebP — 2 Mo maximum.</span>
+                            <form method="POST" enctype="multipart/form-data">
+                                <input type="hidden" name="action" value="upload_photo_pharmacie">
+                                <div class="photo-actions">
+                                    <label class="photo-file" for="photo_pharmacie">
+                                        <i class="fas fa-camera"></i> Choisir une image
+                                        <input type="file" id="photo_pharmacie" name="photo_pharmacie"
+                                               accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                                               data-preview="previewPhotoPharmacie">
+                                    </label>
+                                    <button type="submit" class="btn-photo btn-photo--primary">
+                                        <i class="fas fa-upload"></i> <?php echo $photo_pharmacie_dispo ? 'Remplacer' : 'Ajouter'; ?>
+                                    </button>
+                                </div>
+                            </form>
+                            <form method="POST" onsubmit="return confirm('Supprimer la photo de la pharmacie ?');">
+                                <input type="hidden" name="action" value="delete_photo_pharmacie">
+                                <div class="photo-actions">
+                                    <button type="submit" class="btn-photo btn-photo--danger" <?php echo $photo_pharmacie_dispo ? '' : 'disabled'; ?>>
+                                        <i class="fas fa-trash"></i> Supprimer
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                </div>
 
                 <!-- ===== SECTION 1: INFORMATIONS PERSONNELLES ===== -->
                 <div class="settings-card animate-fade-up delay-2">
@@ -1090,31 +1364,6 @@ $page_title = 'Mon profil - PharmaGeo';
                     </form>
                 </div>
 
-                <!-- ===== SECTION 3: SUPPRESSION DU COMPTE ===== -->
-                <div class="settings-card animate-fade-up delay-4">
-                    <div class="card-header-custom">
-                        <div class="header-icon" style="background: rgba(231,76,60,0.1); color: #e74c3c;">
-                            <i class="fas fa-trash-alt"></i>
-                        </div>
-                        <div class="header-title">
-                            <h5 style="color: #e74c3c;">Supprimer le compte</h5>
-                            <p>Cette action est irréversible</p>
-                        </div>
-                    </div>
-
-                    <div class="alert-custom" style="background: rgba(231,76,60,0.05); border-left-color: #e74c3c; color: #e74c3c;">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <div>
-                            <strong>Attention !</strong> La suppression de votre compte est définitive. 
-                            Toutes vos données (pharmacie, médicaments, réservations) seront supprimées.
-                        </div>
-                    </div>
-
-                    <button class="btn-danger-custom" onclick="confirmDelete()">
-                        <i class="fas fa-trash-alt"></i> Supprimer mon compte
-                    </button>
-                </div>
-
             </div>
         </div>
 
@@ -1133,6 +1382,32 @@ $page_title = 'Mon profil - PharmaGeo';
                 if (e.ctrlKey && e.key.toLowerCase() === 'b') {
                     document.getElementById('sidebar').classList.toggle('open');
                 }
+            });
+
+            // ===== PRÉVISUALISATION DES PHOTOS =====
+            // Affiche l'image choisie avant l'envoi et vérifie format/taille.
+            document.querySelectorAll('input[type=file][data-preview]').forEach(function(input) {
+                input.addEventListener('change', function() {
+                    const cible = document.getElementById(input.getAttribute('data-preview'));
+                    const fichier = input.files && input.files[0];
+                    if (!cible || !fichier) return;
+
+                    const types = ['image/jpeg', 'image/png', 'image/webp'];
+                    if (types.indexOf(fichier.type) === -1) {
+                        alert("Format non autorisé. Utilisez JPG, PNG ou WebP.");
+                        input.value = '';
+                        return;
+                    }
+                    if (fichier.size > 2 * 1024 * 1024) {
+                        alert("L'image ne doit pas dépasser 2 Mo.");
+                        input.value = '';
+                        return;
+                    }
+
+                    const lecteur = new FileReader();
+                    lecteur.onload = function(e) { cible.src = e.target.result; };
+                    lecteur.readAsDataURL(fichier);
+                });
             });
 
             // ===== TOGGLE PASSWORD =====
@@ -1174,19 +1449,19 @@ $page_title = 'Mon profil - PharmaGeo';
                     if (score <= 1) {
                         strengthBar.className = 'bar weak';
                         strengthLabel.textContent = '⚠️ Mot de passe faible';
-                        strengthLabel.style.color = '#e74c3c';
+                        strengthLabel.style.color = '#DC2626';
                     } else if (score === 2) {
                         strengthBar.className = 'bar medium';
                         strengthLabel.textContent = '⚠️ Mot de passe moyen';
-                        strengthLabel.style.color = '#f39c12';
+                        strengthLabel.style.color = '#DC2626';
                     } else if (score === 3) {
                         strengthBar.className = 'bar good';
                         strengthLabel.textContent = '✅ Mot de passe bon';
-                        strengthLabel.style.color = '#2ecc71';
+                        strengthLabel.style.color = '#16A34A';
                     } else {
                         strengthBar.className = 'bar strong';
                         strengthLabel.textContent = '✅ Mot de passe fort';
-                        strengthLabel.style.color = '#27ae60';
+                        strengthLabel.style.color = '#16A34A';
                     }
                 });
             }
@@ -1205,52 +1480,11 @@ $page_title = 'Mon profil - PharmaGeo';
                         passwordMatch.innerHTML = '<i class="fas fa-check-circle" style="color: var(--primary-green);"></i> Les mots de passe correspondent';
                         passwordMatch.style.color = 'var(--primary-green)';
                     } else {
-                        passwordMatch.innerHTML = '<i class="fas fa-exclamation-circle" style="color: #e74c3c;"></i> Les mots de passe ne correspondent pas';
-                        passwordMatch.style.color = '#e74c3c';
+                        passwordMatch.innerHTML = '<i class="fas fa-exclamation-circle" style="color: #DC2626;"></i> Les mots de passe ne correspondent pas';
+                        passwordMatch.style.color = '#DC2626';
                     }
                 });
             }
-
-            // ===== CONFIRMATION SUPPRESSION =====
-            window.confirmDelete = function() {
-                Swal.fire({
-                    title: '⚠️ Supprimer votre compte',
-                    text: 'Cette action est IRRÉVERSIBLE. Toutes vos données seront supprimées définitivement. Êtes-vous absolument sûr ?',
-                    icon: 'error',
-                    showCancelButton: true,
-                    confirmButtonColor: '#e74c3c',
-                    cancelButtonColor: '#6c757d',
-                    confirmButtonText: 'Oui, supprimer mon compte',
-                    cancelButtonText: 'Annuler',
-                    reverseButtons: true
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        Swal.fire({
-                            title: 'Veuillez confirmer',
-                            text: 'Pour confirmer la suppression, tapez "SUPPRIMER" ci-dessous',
-                            input: 'text',
-                            inputPlaceholder: 'Tapez SUPPRIMER',
-                            showCancelButton: true,
-                            confirmButtonColor: '#e74c3c',
-                            cancelButtonColor: '#6c757d',
-                            confirmButtonText: 'Confirmer',
-                            cancelButtonText: 'Annuler',
-                            preConfirm: (value) => {
-                                if (value !== 'SUPPRIMER') {
-                                    Swal.showValidationMessage('Veuillez taper "SUPPRIMER" pour confirmer');
-                                    return false;
-                                }
-                                return true;
-                            }
-                        }).then((result) => {
-                            if (result.isConfirmed) {
-                                // Rediriger vers la page de suppression
-                                window.location.href = '<?php echo BASE_URL; ?>pharmacien/supprimer_compte.php';
-                            }
-                        });
-                    }
-                });
-            };
 
             // ===== KEYBOARD SHORTCUTS =====
             document.addEventListener('keydown', function(e) {
@@ -1269,7 +1503,7 @@ $page_title = 'Mon profil - PharmaGeo';
             });
 
             // ===== CONSOLE LOG =====
-            console.log('%c PharmaGeo - Mon profil pharmacien ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c PharmaGeo - Mon profil pharmacien ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
             console.log('%c Gérez vos informations personnelles.', 'color: #666; font-size: 14px;');
 
         });

@@ -56,7 +56,7 @@ if ($method === 'GET') {
         }
         // Hors mode "all", on n'expose que les stocks actifs des pharmacies actives
         if (!$all) {
-            $sql .= " AND s.Statut != 'desactive' AND p.Statut = 'active'";
+            $sql .= " AND s.Statut != 'desactive' AND m.Statut = 'actif' AND p.Statut = 'active'";
         }
 
         $sql .= " ORDER BY m.Nom_commercial ASC";
@@ -165,6 +165,16 @@ if ($method === 'POST') {
         }
         // Création d'un nouveau stock
         elseif ($id_medicament > 0) {
+            // Refuser les médicaments suspendus
+            $stmt = $pdo->prepare("SELECT Statut FROM medicament WHERE Id_medicament = :med");
+            $stmt->execute([':med' => $id_medicament]);
+            $med_row = $stmt->fetch();
+            if (!$med_row || $med_row['Statut'] === 'suspendu') {
+                http_response_code(400);
+                echo json_encode(['error' => 'Ce médicament est suspendu.']);
+                exit;
+            }
+
             $statut = $quantite <= 0 ? 'rupture' : ($quantite <= $seuil ? 'stock_faible' : 'disponible');
 
             $pdo->beginTransaction();

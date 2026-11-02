@@ -12,6 +12,9 @@ ini_set('display_errors', 1);
 // ===== DÉFINITION DES CONSTANTES =====
 define('BASE_URL', 'http://localhost/pharmageo/');
 
+// ===== FONCTIONS UTILITAIRES =====
+require_once __DIR__ . '/../includes/fonctions.php';
+
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
     $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
@@ -96,28 +99,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     // ===== GESTION DU LOGO (upload sécurisé) =====
     $logo_path = null;
     if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
-        $file = $_FILES['logo'];
-        // ===== VALIDATION DE L'EXTENSION ET DE LA TAILLE =====
-            // Vérifier l'extension et la taille maximale (2 Mo) avant l'envoi
-            $extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-        $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        
-        if (!in_array($extension, $extensions)) {
-            $errors[] = "Format de fichier non autorisé. Utilisez JPG, PNG, GIF ou WEBP.";
-        } elseif ($file['size'] > 2097152) { // 2MB
-            $errors[] = "Le fichier est trop volumineux (max 2MB).";
-        } else {
-            // ===== ENREGISTREMENT DU FICHIER DANS UPLOADS/LOGOS =====
-            $upload_dir = $_SERVER['DOCUMENT_ROOT'] . '/PharmaGeo/uploads/logos/';
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0777, true);
-            }
-            $new_filename = 'pharmacie_' . $user['Id_pharmacie'] . '.' . $extension;
-            $logo_path = '/PharmaGeo/uploads/logos/' . $new_filename;
-            
-            if (!move_uploaded_file($file['tmp_name'], $_SERVER['DOCUMENT_ROOT'] . $logo_path)) {
-                $errors[] = "Erreur lors de l'upload du logo.";
-            }
+        try {
+            $logo_path = pharma_upload_image($_FILES['logo'], 'logos', 'pharmacie_' . $user['Id_pharmacie']);
+        } catch (RuntimeException $e) {
+            $errors[] = $e->getMessage();
         }
     }
     
@@ -151,6 +136,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
+
+            // Supprime l'ancien logo pour ne pas laisser de fichier orphelin.
+            if ($logo_path && !empty($user['Logo']) && $user['Logo'] !== $logo_path) {
+                pharma_supprimer_image($user['Logo']);
+            }
             
             // Mise à jour des jours de permanence (suppression puis réinsertion)
             $pdo->prepare("DELETE FROM jour_permanence WHERE Id_pharmacie = :id")->execute([':id' => $user['Id_pharmacie']]);
@@ -206,46 +196,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 // ===== DEMANDE DE MODIFICATION DU STATUT =====
+// La suspension / réactivation d'une pharmacie est une action réservée à l'administrateur.
 if (isset($_GET['action']) && $_GET['action'] === 'changer_statut') {
-    $new_statut = $_GET['statut'] ?? '';
-    $statuts_valides = ['active', 'suspendue'];
-    
-    if (in_array($new_statut, $statuts_valides) && $has_pharmacy) {
-        try {
-            $stmt = $pdo->prepare("UPDATE pharmacie SET Statut = :statut WHERE Id_pharmacie = :id");
-            $stmt->execute([':statut' => $new_statut, ':id' => $user['Id_pharmacie']]);
-            
-            $log = $pdo->prepare("
-                INSERT INTO log (Action, Adresse_ip, Navigateur, Resultat, Id_utilisateur)
-                VALUES ('Changement statut pharmacie vers ' . :statut, :ip, :ua, 'succes', :user)
-            ");
-            $log->execute([
-                ':statut' => $new_statut,
-                ':ip' => $_SERVER['REMOTE_ADDR'] ?? '',
-                ':ua' => $_SERVER['HTTP_USER_AGENT'] ?? '',
-                ':user' => $_SESSION['user_id']
-            ]);
-            
-            $success = "Statut de la pharmacie modifié avec succès !";
-            
-            // Recharger les données
-            $stmt = $pdo->prepare("
-                SELECT u.*, ph.Id_pharmacien, ph.Numero_ordre, ph.Statut_validation,
-                       p.Id_pharmacie, p.Nom as Pharmacie_Nom, p.Adresse, p.Quartier, p.Commune,
-                       p.Latitude, p.Longitude, p.Telephone as Pharmacie_Tel, p.Email as Pharmacie_Email,
-                       p.Horaire, p.Statut as Pharmacie_Statut, p.Logo
-                FROM utilisateur u
-                JOIN pharmacien ph ON u.Id_utilisateur = ph.Id_utilisateur
-                LEFT JOIN pharmacie p ON ph.Id_pharmacien = p.Id_pharmacien
-                WHERE u.Id_utilisateur = :id
-            ");
-            $stmt->execute([':id' => $_SESSION['user_id']]);
-            $user = $stmt->fetch();
-            
-        } catch(PDOException $e) {
-            $error = "Erreur lors du changement de statut : " . $e->getMessage();
-        }
-    }
+    $error = "La suspension ou la réactivation de votre pharmacie est gérée par l'administrateur.";
+    $error_type = "warning";
 }
 
 $page_title = 'Ma pharmacie - PharmaGeo';
@@ -269,17 +223,17 @@ $page_title = 'Ma pharmacie - PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --light-bg: #f0f2f5;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --light-bg: #F0FDF4;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-sm: 0 2px 20px rgba(0,0,0,0.04);
             --shadow-md: 0 8px 40px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
-            --shadow-glow-orange: 0 8px 40px rgba(200, 120, 30, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
+            --shadow-glow-orange: 0 8px 40px rgba(21,128,61, 0.20);
             --radius: 16px;
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -372,7 +326,7 @@ $page_title = 'Ma pharmacie - PharmaGeo';
         .nav-link-custom:hover,
         .nav-link-custom.active {
             color: var(--primary-green);
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
         }
 
         .nav-link-custom::after {
@@ -394,32 +348,39 @@ $page_title = 'Ma pharmacie - PharmaGeo';
         }
 
         .btn-nav-logout {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            background: linear-gradient(135deg, #DC2626, #B91C1C);
             color: white !important;
             padding: 8px 24px !important;
             border-radius: 50px !important;
             font-weight: 600;
             transition: var(--transition);
             border: none;
-            box-shadow: 0 4px 15px rgba(231,76,60,0.2);
+            box-shadow: 0 4px 15px rgba(220,38,38,0.2);
         }
 
         .btn-nav-logout:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(231,76,60,0.35);
+            box-shadow: 0 8px 30px rgba(220,38,38,0.35);
             color: white !important;
         }
 
         /* ===== LAYOUT / SIDEBAR ===== */
         .layout { display: flex; min-height: 100vh; }
         .sidebar-admin {
-            width: 250px; background: linear-gradient(180deg, #0c1f14, #143a1c);
+            width: 250px; background: linear-gradient(180deg, #0F2E19, #14532D);
             color: #fff; flex-shrink: 0; display: flex; flex-direction: column;
             position: fixed; top: 0; bottom: 0; left: 0; overflow-y: auto; z-index: 100;
         }
         .brand-admin { padding: 22px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; }
-        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; }
+        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center;  color: #fff;}
+        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; 
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: #fff;
+        }
+        
         .brand-admin small { color: rgba(255,255,255,0.6); display: block; }
         .nav-menu { padding: 16px 12px; flex: 1; }
         .nav-label { color: rgba(255,255,255,0.4); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; padding: 12px 12px 6px; }
@@ -431,6 +392,10 @@ $page_title = 'Ma pharmacie - PharmaGeo';
         .user-profile .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; font-weight: 800; }
         .user-profile .name { font-size: 0.9rem; font-weight: 600; }
         .user-profile .role { font-size: 0.75rem; color: rgba(255,255,255,0.6); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
         @media (max-width: 991px) {
             .sidebar-admin { position: fixed; transform: translateX(-100%); transition: transform 0.3s ease; }
             .sidebar-admin.open { transform: translateX(0); }
@@ -495,7 +460,7 @@ $page_title = 'Ma pharmacie - PharmaGeo';
             gap: 20px;
             margin-bottom: 20px;
             padding-bottom: 20px;
-            border-bottom: 1px solid #f0f0f0;
+            border-bottom: 1px solid #F0FDF4;
             flex-wrap: wrap;
         }
 
@@ -503,7 +468,7 @@ $page_title = 'Ma pharmacie - PharmaGeo';
             width: 100px;
             height: 100px;
             border-radius: 16px;
-            background: linear-gradient(135deg, rgba(42,195,42,0.1), rgba(200,120,30,0.1));
+            background: linear-gradient(135deg, rgba(22,163,74,0.1), rgba(21,128,61,0.1));
             display: flex;
             align-items: center;
             justify-content: center;
@@ -511,7 +476,7 @@ $page_title = 'Ma pharmacie - PharmaGeo';
             color: var(--primary-green);
             flex-shrink: 0;
             overflow: hidden;
-            border: 2px solid #f0f0f0;
+            border: 2px solid #F0FDF4;
         }
 
         .pharmacy-card .pharmacy-logo img {
@@ -534,18 +499,18 @@ $page_title = 'Ma pharmacie - PharmaGeo';
         }
 
         .pharmacy-card .pharmacy-title .status-badge.active {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .pharmacy-card .pharmacy-title .status-badge.en_attente {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
         .pharmacy-card .pharmacy-title .status-badge.suspendue {
-            background: rgba(231,76,60,0.1);
-            color: #e74c3c;
+            background: rgba(220,38,38,0.1);
+            color: #DC2626;
         }
 
         /* ===== INFO GRID ===== */
@@ -564,7 +529,7 @@ $page_title = 'Ma pharmacie - PharmaGeo';
         }
 
         .info-item:hover {
-            background: rgba(42,195,42,0.04);
+            background: rgba(22,163,74,0.04);
         }
 
         .info-item .info-label {
@@ -622,12 +587,12 @@ $page_title = 'Ma pharmacie - PharmaGeo';
         }
 
         .settings-card .card-header-custom .header-icon.green {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .settings-card .card-header-custom .header-icon.orange {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
@@ -654,7 +619,7 @@ $page_title = 'Ma pharmacie - PharmaGeo';
         }
 
         .form-modern .form-label .required {
-            color: #e74c3c;
+            color: #DC2626;
             margin-left: 2px;
         }
 
@@ -675,22 +640,22 @@ $page_title = 'Ma pharmacie - PharmaGeo';
 
         .form-modern .input-group-custom .form-control {
             padding: 12px 16px 12px 44px;
-            border: 2px solid #e8ecf1;
+            border: 2px solid #D9E9DF;
             border-radius: 14px;
             font-size: 0.95rem;
             transition: var(--transition);
-            background: #f8f9fa;
+            background: #F0FDF4;
             color: var(--dark-text);
         }
 
         .form-modern .input-group-custom .form-control:focus {
             border-color: var(--primary-green);
-            box-shadow: 0 0 0 4px rgba(42,195,42,0.1);
+            box-shadow: 0 0 0 4px rgba(22,163,74,0.1);
             background: var(--white);
         }
 
         .form-modern .input-group-custom .form-control:disabled {
-            background: #f0f0f0;
+            background: #F0FDF4;
             cursor: not-allowed;
         }
 
@@ -711,28 +676,11 @@ $page_title = 'Ma pharmacie - PharmaGeo';
 
         .btn-primary-custom:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 40px rgba(42,195,42,0.4);
+            box-shadow: 0 12px 40px rgba(22,163,74,0.4);
             color: white;
         }
 
         .btn-primary-custom:active { transform: scale(0.98); }
-
-        .btn-danger-custom {
-            background: #e74c3c;
-            color: white;
-            border: none;
-            padding: 10px 24px;
-            border-radius: 50px;
-            font-weight: 600;
-            transition: var(--transition);
-        }
-
-        .btn-danger-custom:hover {
-            background: #c0392b;
-            transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(231,76,60,0.3);
-            color: white;
-        }
 
         /* ===== ALERTES ===== */
         .alert-custom {
@@ -749,19 +697,19 @@ $page_title = 'Ma pharmacie - PharmaGeo';
         .alert-custom i { font-size: 1.2rem; margin-top: 2px; }
 
         .alert-custom-success {
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
             color: var(--primary-green);
             border-left: 4px solid var(--primary-green);
         }
 
         .alert-custom-danger {
-            background: rgba(231,76,60,0.08);
-            color: #e74c3c;
-            border-left: 4px solid #e74c3c;
+            background: rgba(220,38,38,0.08);
+            color: #DC2626;
+            border-left: 4px solid #DC2626;
         }
 
         .alert-custom-warning {
-            background: rgba(200,120,30,0.08);
+            background: rgba(21,128,61,0.08);
             color: var(--primary-orange);
             border-left: 4px solid var(--primary-orange);
         }
@@ -773,7 +721,7 @@ $page_title = 'Ma pharmacie - PharmaGeo';
             border-radius: 50px;
             font-size: 0.75rem;
             font-weight: 600;
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
             margin: 2px;
         }
@@ -791,10 +739,10 @@ $page_title = 'Ma pharmacie - PharmaGeo';
             gap: 6px;
             padding: 8px 12px;
             border-radius: 10px;
-            border: 2px solid #e8ecf1;
+            border: 2px solid #D9E9DF;
             cursor: pointer;
             transition: var(--transition);
-            background: #f8f9fa;
+            background: #F0FDF4;
         }
 
         .day-check:hover {
@@ -809,7 +757,7 @@ $page_title = 'Ma pharmacie - PharmaGeo';
 
         .day-check.active {
             border-color: var(--primary-green);
-            background: rgba(42,195,42,0.05);
+            background: rgba(22,163,74,0.05);
         }
 
         /* ===== RESPONSIVE ===== */
@@ -837,7 +785,8 @@ $page_title = 'Ma pharmacie - PharmaGeo';
             .navbar-brand-custom { font-size: 1.3rem; }
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/responsive.css">
+    <link rel="stylesheet" href="../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -845,10 +794,10 @@ $page_title = 'Ma pharmacie - PharmaGeo';
 
     <!-- ===== SIDEBAR ===== -->
     <aside class="sidebar-admin" id="sidebar">
-        <div class="brand-admin">
+        <a href="<?php echo BASE_URL; ?>index.php" class="brand-admin" style="text-decoration: none;">
             <div class="brand-icon"><i class="fas fa-hospital"></i></div>
-            <div><h4>PharmaGeo</h4><small>Pharmacien</small></div>
-        </div>
+            <div><h4>PharmaGeo</h4><small><?php echo htmlspecialchars(pharma_libelle_role('pharmacien', $user['Prenom'] ?? '')); ?></small></div>
+        </a>
         <nav class="nav-menu">
             <div class="nav-label">Navigation</div>
             <a href="<?php echo BASE_URL; ?>pharmacien/dashboard.php" class="nav-item"><i class="fas fa-tachometer-alt"></i><span>Tableau de bord</span></a>
@@ -860,15 +809,17 @@ $page_title = 'Ma pharmacie - PharmaGeo';
             <a href="<?php echo BASE_URL; ?>pharmacien/statistiques.php" class="nav-item"><i class="fas fa-chart-bar"></i><span>Statistiques</span></a>
             <a href="<?php echo BASE_URL; ?>pharmacien/profil.php" class="nav-item"><i class="fas fa-user"></i><span>Profil</span></a>
             <div class="nav-label" style="margin-top: 20px;">Système</div>
-            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
+            <?php require_once __DIR__ . '/../includes/reinitialiser.php'; echo html_bloc_reinitialiser(); ?>
+            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.15); margin-bottom: 12px;"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
         </nav>
-        <div class="user-profile">
-            <div class="avatar"><?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?></div>
+        <a class="user-profile" href="<?php echo BASE_URL; ?>pharmacien/profil.php" title="Voir mon profil">
+            <div class="avatar"><?php if (!empty($_SESSION['photo']) && function_exists('pharma_image_disponible') && pharma_image_disponible($_SESSION['photo'])): ?><img src="<?php echo htmlspecialchars(pharma_image_url($_SESSION['photo'])); ?>" alt=""><?php else: ?><?php echo strtoupper(substr($_SESSION['prenom'] ?? 'A', 0, 1) . substr($_SESSION['nom'] ?? 'D', 0, 1)); ?><?php endif; ?></div>
             <div>
                 <div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div>
-                <div class="role"><i class="fas fa-user-md me-1" style="color:#f1c40f;"></i> Pharmacien</div>
+                <div class="role"><i class="fas fa-user-md me-1" style="color:#DC2626;"></i> <?php echo htmlspecialchars(pharma_libelle_role('pharmacien', $user['Prenom'] ?? '')); ?></div>
             </div>
-        </div>
+            <i class="fas fa-chevron-right profile-chevron"></i>
+        </a>
     </aside>
 
     <!-- ===== MAIN CONTENT ===== -->
@@ -887,7 +838,7 @@ $page_title = 'Ma pharmacie - PharmaGeo';
 
         <!-- ===== MESSAGES ===== -->
         <?php if (!empty($error)): ?>
-            <div class="alert-custom alert-custom-danger animate-fade-up">
+            <div class="alert-custom alert-custom-<?php echo $error_type ?? 'danger'; ?> animate-fade-up">
                 <i class="fas fa-exclamation-circle"></i>
                 <div><?php echo $error; ?></div>
             </div>
@@ -906,11 +857,7 @@ $page_title = 'Ma pharmacie - PharmaGeo';
             <div class="pharmacy-card animate-fade-up delay-1">
                 <div class="pharmacy-header">
                     <div class="pharmacy-logo">
-                        <?php if (!empty($user['Logo'])): ?>
-                            <img src="<?php echo BASE_URL . ltrim($user['Logo'], '/'); ?>" alt="Logo de la pharmacie">
-                        <?php else: ?>
-                            <i class="fas fa-store"></i>
-                        <?php endif; ?>
+                        <img src="<?php echo htmlspecialchars(pharma_image_url_ou_defaut($user['Logo'] ?? null, 'pharmacie')); ?>" alt="Logo de la pharmacie">
                     </div>
                     <div class="pharmacy-title">
                         <h3><?php echo htmlspecialchars($user['Pharmacie_Nom']); ?></h3>
@@ -992,19 +939,6 @@ $page_title = 'Ma pharmacie - PharmaGeo';
                     <a href="#edit-section" class="btn-primary-custom" style="text-decoration: none;">
                         <i class="fas fa-edit"></i> Modifier les informations
                     </a>
-                    <?php if ($user['Pharmacie_Statut'] === 'active'): ?>
-                        <a href="<?php echo BASE_URL; ?>pharmacien/pharmacie.php?action=changer_statut&statut=suspendue" 
-                           class="btn-danger-custom" style="text-decoration: none;"
-                           onclick="return confirm('Êtes-vous sûr de vouloir suspendre votre pharmacie ? Les patients ne pourront plus voir votre officine.')">
-                            <i class="fas fa-pause"></i> Suspendre la pharmacie
-                        </a>
-                    <?php elseif ($user['Pharmacie_Statut'] === 'suspendue'): ?>
-                        <a href="<?php echo BASE_URL; ?>pharmacien/pharmacie.php?action=changer_statut&statut=active" 
-                           class="btn-primary-custom" style="text-decoration: none;"
-                           onclick="return confirm('Êtes-vous sûr de vouloir réactiver votre pharmacie ?')">
-                            <i class="fas fa-play"></i> Réactiver la pharmacie
-                        </a>
-                    <?php endif; ?>
                 </div>
             </div>
 
@@ -1037,9 +971,12 @@ $page_title = 'Ma pharmacie - PharmaGeo';
                             <div class="input-group-custom">
                                 <span class="input-icon"><i class="fas fa-image"></i></span>
                                 <input type="file" class="form-control" id="logo" name="logo" 
-                                       accept="image/*" style="padding-left: 44px;">
+                                       accept="image/jpeg,image/png,image/webp"
+                                       data-preview="logoPreview" style="padding-left: 44px;">
                             </div>
-                            <small class="text-muted">Format: JPG, PNG, GIF, WEBP (max 2MB)</small>
+                            <img id="logoPreview" src="" alt="Aperçu du logo"
+                                 style="display:none; margin-top:10px; max-height:90px; border-radius:8px; border:1px solid #E5E7EB;">
+                            <small class="text-muted">Format: JPG, PNG, WEBP (max 2MB)</small>
                         </div>
                     </div>
 
@@ -1232,6 +1169,34 @@ $page_title = 'Ma pharmacie - PharmaGeo';
                 }
             });
 
+            // ===== PRÉVISUALISATION DU LOGO =====
+            document.querySelectorAll('input[type=file][data-preview]').forEach(function(input) {
+                input.addEventListener('change', function() {
+                    const cible = document.getElementById(input.getAttribute('data-preview'));
+                    const fichier = input.files && input.files[0];
+                    if (!cible || !fichier) return;
+
+                    const types = ['image/jpeg', 'image/png', 'image/webp'];
+                    if (types.indexOf(fichier.type) === -1) {
+                        alert("Format non autorisé. Utilisez JPG, PNG ou WebP.");
+                        input.value = '';
+                        return;
+                    }
+                    if (fichier.size > 2 * 1024 * 1024) {
+                        alert("L'image ne doit pas dépasser 2 Mo.");
+                        input.value = '';
+                        return;
+                    }
+
+                    const lecteur = new FileReader();
+                    lecteur.onload = function(e) {
+                        cible.src = e.target.result;
+                        cible.style.display = 'block';
+                    };
+                    lecteur.readAsDataURL(fichier);
+                });
+            });
+
             // ===== DAYS CHECKBOX TOGGLE =====
             const dayCheckboxes = Array.from(document.querySelectorAll('.days-grid .day-check input[type="checkbox"]'));
             const allToggle = document.getElementById('toggleAllDays');
@@ -1272,7 +1237,7 @@ $page_title = 'Ma pharmacie - PharmaGeo';
             });
 
             // ===== CONSOLE LOG =====
-            console.log('%c PharmaGeo - Ma pharmacie ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c PharmaGeo - Ma pharmacie ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
             console.log('%c Gérez les informations de votre officine.', 'color: #666; font-size: 14px;');
 
         });

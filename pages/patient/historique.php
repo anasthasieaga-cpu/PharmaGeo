@@ -11,6 +11,9 @@ ini_set('display_errors', 1);
 // ===== DÉFINITION DES CONSTANTES =====
 define('BASE_URL', 'http://localhost/pharmageo/');
 
+// ===== PAGINATION (10 éléments par page) =====
+require_once __DIR__ . '/../../includes/pagination.php';
+
 // ===== CONNEXION À LA BASE DE DONNÉES =====
 try {
     $pdo = new PDO("mysql:host=localhost;dbname=gestion_soutenance;charset=utf8mb4", "root", "");
@@ -46,16 +49,12 @@ try {
     die("Erreur : " . $e->getMessage());
 }
 
-// ===== PARAMÈTRES DE PAGINATION =====
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$page = max(1, $page);
-$per_page = 10;
-$offset = ($page - 1) * $per_page;
-
 // ===== FILTRES =====
 $filtre_type = isset($_GET['type']) ? $_GET['type'] : 'tous';
 $filtre_statut = isset($_GET['statut']) ? $_GET['statut'] : 'tous';
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
+
+$pagination = pagination_calculer(0);
 
 // ===== RÉCUPÉRATION DE L'HISTORIQUE =====
 $historique = [];
@@ -70,6 +69,8 @@ try {
             r.Date_reservation as date,
             r.Statut as statut,
             r.Quantite,
+            r.Montant,
+            s.Prix as prix_unitaire,
             m.Nom_commercial as nom,
             m.DCI,
             p.Nom as pharmacie,
@@ -85,6 +86,8 @@ try {
     ";
 
     // Requête pour les recherches
+    // (mêmes colonnes que $sql_reservations : l'UNION ALL exige
+    //  exactement le même nombre de colonnes dans chaque branche)
     $sql_recherches = "
         SELECT 
             'recherche' as type,
@@ -92,6 +95,8 @@ try {
             Date_recherche as date,
             NULL as statut,
             NULL as Quantite,
+            NULL as Montant,
+            NULL as prix_unitaire,
             Mot_recherche as nom,
             NULL as DCI,
             NULL as pharmacie,
@@ -130,40 +135,16 @@ try {
     }
 
     // Union des deux requêtes
-    $sql = "
+    $sql_union = "
         SELECT * FROM (
             $sql_reservations $where_reservations
             UNION ALL
             $sql_recherches $where_recherches
         ) as historique
-        ORDER BY date DESC
-        LIMIT :offset, :per_page
     ";
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->bindValue(':user_id', $_SESSION['user_id']);
-    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-    $stmt->bindValue(':per_page', $per_page, PDO::PARAM_INT);
-    
-    if (!empty($search)) {
-        $stmt->bindValue(':search', $search_param);
-    }
-    if (isset($params[':statut'])) {
-        $stmt->bindValue(':statut', $params[':statut']);
-    }
-    
-    $stmt->execute();
-    $historique = $stmt->fetchAll();
-
-    // Compter le total pour la pagination
-    $sql_count = "
-        SELECT COUNT(*) as total FROM (
-            $sql_reservations $where_reservations
-            UNION ALL
-            $sql_recherches $where_recherches
-        ) as historique
-    ";
-    $stmt_count = $pdo->prepare($sql_count);
+    // Compter le total correspondant aux filtres (pagination)
+    $stmt_count = $pdo->prepare("SELECT COUNT(*) as total FROM ($sql_union) as historique_total");
     $stmt_count->bindValue(':user_id', $_SESSION['user_id']);
     if (!empty($search)) {
         $stmt_count->bindValue(':search', $search_param);
@@ -172,7 +153,27 @@ try {
         $stmt_count->bindValue(':statut', $params[':statut']);
     }
     $stmt_count->execute();
-    $total_historique = $stmt_count->fetch()['total'] ?? 0;
+    $total_historique = (int) $stmt_count->fetchColumn();
+
+    $pagination = pagination_calculer($total_historique);
+
+    // Seule la page courante est chargée.
+    // LIMIT/OFFSET injectés en dur : cette version de MariaDB refuse les
+    // placeholders préparés dans LIMIT (cf. includes/pagination.php).
+    $sql = "$sql_union ORDER BY date DESC" . pagination_sql_limite($pagination);
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->bindValue(':user_id', $_SESSION['user_id']);
+
+    if (!empty($search)) {
+        $stmt->bindValue(':search', $search_param);
+    }
+    if (isset($params[':statut'])) {
+        $stmt->bindValue(':statut', $params[':statut']);
+    }
+
+    $stmt->execute();
+    $historique = $stmt->fetchAll();
 
     // ===== RÉCUPÉRATION DES STATISTIQUES (CORRIGÉ) =====
     // Total des réservations
@@ -207,6 +208,7 @@ try {
 } catch(PDOException $e) {
     $historique = [];
     $total_historique = 0;
+    $pagination = pagination_calculer(0);
     $stats = ['total' => 0, 'reservations' => 0, 'recherches' => 0, 'en_attente' => 0, 'confirmees' => 0];
 }
 
@@ -221,7 +223,6 @@ $statuts_labels = [
 ];
 
 // ===== PAGINATION =====
-$total_pages = ceil($total_historique / $per_page);
 
 $page_title = 'Historique - PharmaGeo';
 ?>
@@ -244,17 +245,17 @@ $page_title = 'Historique - PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --light-bg: #f0f2f5;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --light-bg: #F0FDF4;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-sm: 0 2px 20px rgba(0,0,0,0.04);
             --shadow-md: 0 8px 40px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
-            --shadow-glow-orange: 0 8px 40px rgba(200, 120, 30, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
+            --shadow-glow-orange: 0 8px 40px rgba(21,128,61, 0.20);
             --radius: 16px;
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -347,7 +348,7 @@ $page_title = 'Historique - PharmaGeo';
         .nav-link-custom:hover,
         .nav-link-custom.active {
             color: var(--primary-green);
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
         }
 
         .nav-link-custom::after {
@@ -369,32 +370,39 @@ $page_title = 'Historique - PharmaGeo';
         }
 
         .btn-nav-logout {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            background: linear-gradient(135deg, #DC2626, #B91C1C);
             color: white !important;
             padding: 8px 24px !important;
             border-radius: 50px !important;
             font-weight: 600;
             transition: var(--transition);
             border: none;
-            box-shadow: 0 4px 15px rgba(231,76,60,0.2);
+            box-shadow: 0 4px 15px rgba(220,38,38,0.2);
         }
 
         .btn-nav-logout:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(231,76,60,0.35);
+            box-shadow: 0 8px 30px rgba(220,38,38,0.35);
             color: white !important;
         }
 
         /* ===== LAYOUT / SIDEBAR ===== */
         .layout { display: flex; min-height: 100vh; }
         .sidebar-admin {
-            width: 250px; background: linear-gradient(180deg, #0c1f14, #143a1c);
+            width: 250px; background: linear-gradient(180deg, #0F2E19, #14532D);
             color: #fff; flex-shrink: 0; display: flex; flex-direction: column;
             position: fixed; top: 0; bottom: 0; left: 0; overflow-y: auto; z-index: 100;
         }
         .brand-admin { padding: 22px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; }
-        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; }
+        .brand-admin .brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center;  color: #fff;}
+        .brand-admin h4 { margin: 0; font-weight: 800; font-size: 1.1rem; color: #fff; 
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: #fff;
+        }
+        
         .brand-admin small { color: rgba(255,255,255,0.6); display: block; }
         .nav-menu { padding: 16px 12px; flex: 1; }
         .nav-label { color: rgba(255,255,255,0.4); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; padding: 12px 12px 6px; }
@@ -406,6 +414,10 @@ $page_title = 'Historique - PharmaGeo';
         .user-profile .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); display: flex; align-items: center; justify-content: center; font-weight: 800; }
         .user-profile .name { font-size: 0.9rem; font-weight: 600; }
         .user-profile .role { font-size: 0.75rem; color: rgba(255,255,255,0.6); }
+        a.user-profile { text-decoration: none; color: inherit; transition: background-color 0.2s ease; }
+        a.user-profile:hover { background-color: rgba(255,255,255,0.07); }
+        a.user-profile .profile-chevron { margin-left: auto; font-size: 0.7rem; color: rgba(255,255,255,0.45); }
+        a.user-profile:hover .profile-chevron { color: #fff; }
         @media (max-width: 991px) {
             .sidebar-admin { position: fixed; transform: translateX(-100%); transition: transform 0.3s ease; }
             .sidebar-admin.open { transform: translateX(0); }
@@ -503,23 +515,23 @@ $page_title = 'Historique - PharmaGeo';
         }
 
         .stat-card .stat-icon.green {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .stat-card .stat-icon.orange {
-            background: rgba(200,120,30,0.1);
+            background: rgba(21,128,61,0.1);
             color: var(--primary-orange);
         }
 
         .stat-card .stat-icon.blue {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         .stat-card .stat-icon.purple {
             background: rgba(155,89,182,0.1);
-            color: #9b59b6;
+            color: #1F2937;
         }
 
         .stat-card .stat-number {
@@ -552,7 +564,7 @@ $page_title = 'Historique - PharmaGeo';
         .filters-bar .filter-btn {
             padding: 6px 18px;
             border-radius: 50px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid #D9E9DF;
             background: transparent;
             font-weight: 500;
             font-size: 0.8rem;
@@ -604,7 +616,7 @@ $page_title = 'Historique - PharmaGeo';
         .search-box:focus-within {
             border-color: var(--primary-green);
             background: var(--white);
-            box-shadow: 0 0 0 4px rgba(42,195,42,0.1);
+            box-shadow: 0 0 0 4px rgba(22,163,74,0.1);
         }
 
         .search-box .form-control {
@@ -654,14 +666,14 @@ $page_title = 'Historique - PharmaGeo';
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--gray-text);
-            border-bottom: 2px solid #f0f0f0;
+            border-bottom: 2px solid #F0FDF4;
             padding: 12px 10px;
         }
 
         .table-custom tbody td {
             padding: 14px 10px;
             vertical-align: middle;
-            border-bottom: 1px solid #f5f5f5;
+            border-bottom: 1px solid #F0FDF4;
             font-size: 0.9rem;
         }
 
@@ -670,7 +682,7 @@ $page_title = 'Historique - PharmaGeo';
         }
 
         .table-custom tbody tr:hover {
-            background: rgba(42,195,42,0.02);
+            background: rgba(22,163,74,0.02);
         }
 
         .table-custom tbody tr:last-child td {
@@ -689,33 +701,33 @@ $page_title = 'Historique - PharmaGeo';
         }
 
         .badge-status.en_attente {
-            background: rgba(200,120,30,0.12);
+            background: rgba(21,128,61,0.12);
             color: var(--primary-orange);
         }
 
         .badge-status.confirmee {
-            background: rgba(42,195,42,0.12);
+            background: rgba(22,163,74,0.12);
             color: var(--primary-green);
         }
 
         .badge-status.refusee {
-            background: rgba(231,76,60,0.12);
-            color: #e74c3c;
+            background: rgba(220,38,38,0.12);
+            color: #DC2626;
         }
 
         .badge-status.expiree {
             background: rgba(155,89,182,0.12);
-            color: #9b59b6;
+            color: #1F2937;
         }
 
         .badge-status.retiree {
-            background: rgba(52,152,219,0.12);
-            color: #3498db;
+            background: rgba(22,83,52,0.12);
+            color: #166534;
         }
 
         .badge-status.annulee {
             background: rgba(108,117,125,0.12);
-            color: #6c757d;
+            color: #64748B;
         }
 
         .badge-type {
@@ -726,13 +738,13 @@ $page_title = 'Historique - PharmaGeo';
         }
 
         .badge-type.reservation {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .badge-type.recherche {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
 
         /* ===== EMPTY STATE ===== */
@@ -770,7 +782,7 @@ $page_title = 'Historique - PharmaGeo';
         .pagination-custom .page-link-custom {
             padding: 8px 16px;
             border-radius: 10px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid #D9E9DF;
             background: transparent;
             color: var(--gray-text);
             font-weight: 500;
@@ -839,16 +851,17 @@ $page_title = 'Historique - PharmaGeo';
         }
 
         .type-icon.reservation {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .type-icon.recherche {
-            background: rgba(52,152,219,0.1);
-            color: #3498db;
+            background: rgba(22,83,52,0.1);
+            color: #166534;
         }
     </style>
-    <link rel="stylesheet" href="../../assets/css/responsive.css">
+    <link rel="stylesheet" href="../../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -856,10 +869,10 @@ $page_title = 'Historique - PharmaGeo';
 
     <!-- ===== SIDEBAR ===== -->
     <aside class="sidebar-admin" id="sidebar">
-        <div class="brand-admin">
+        <a href="<?php echo BASE_URL; ?>index.php" class="brand-admin" style="text-decoration: none;">
             <div class="brand-icon"><i class="fas fa-hospital"></i></div>
             <div><h4>PharmaGeo</h4><small>Patient</small></div>
-        </div>
+        </a>
         <nav class="nav-menu">
             <div class="nav-label">Navigation</div>
             <a href="<?php echo BASE_URL; ?>pages/patient/dashboard.php" class="nav-item"><i class="fas fa-tachometer-alt"></i><span>Tableau de bord</span></a>
@@ -868,15 +881,16 @@ $page_title = 'Historique - PharmaGeo';
             <a href="<?php echo BASE_URL; ?>pages/patient/historique.php" class="nav-item active"><i class="fas fa-history"></i><span>Historique</span></a>
             <a href="<?php echo BASE_URL; ?>pages/patient/profil.php" class="nav-item"><i class="fas fa-user"></i><span>Profil</span></a>
             <div class="nav-label" style="margin-top: 20px;">Système</div>
-            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: rgba(255,255,255,0.4);"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
+            <a href="<?php echo BASE_URL; ?>deconnexion.php" class="nav-item" style="color: #FEF2F2; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.15); margin-bottom: 12px;"><i class="fas fa-sign-out-alt"></i><span>Déconnexion</span></a>
         </nav>
-        <div class="user-profile">
-            <div class="avatar"><?php echo strtoupper(substr(($_SESSION['prenom'] ?? 'A'), 0, 1) . substr(($_SESSION['nom'] ?? 'D'), 0, 1)); ?></div>
-            <div>
-                <div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div>
-                <div class="role"><i class="fas fa-user me-1" style="color:#f1c40f;"></i> Patient</div>
-            </div>
-        </div>
+<a class="user-profile" href="<?php echo BASE_URL; ?>pages/patient/profil.php" title="Voir mon profil">
+                <div class="avatar"><?php echo strtoupper(substr(($_SESSION['prenom'] ?? 'A'), 0, 1) . substr(($_SESSION['nom'] ?? 'D'), 0, 1)); ?></div>
+                <div>
+                    <div class="name"><?php echo htmlspecialchars(($_SESSION['prenom'] ?? '') . ' ' . ($_SESSION['nom'] ?? '')); ?></div>
+                    <div class="role"><i class="fas fa-user me-1" style="color:#DC2626;"></i> Patient</div>
+                </div>
+    <i class="fas fa-chevron-right profile-chevron"></i>
+</a>
     </aside>
 
     <!-- ===== MAIN CONTENT ===== -->
@@ -975,7 +989,7 @@ $page_title = 'Historique - PharmaGeo';
                     <i class="fas fa-search"></i>
                 </button>
                 <?php if (!empty($search)): ?>
-                    <a href="<?php echo BASE_URL; ?>pages/patient/historique.php?type=<?php echo $filtre_type; ?>&statut=<?php echo $filtre_statut; ?>" class="btn-search" style="background: #e74c3c; padding: 6px 12px;">
+                    <a href="<?php echo BASE_URL; ?>pages/patient/historique.php?type=<?php echo $filtre_type; ?>&statut=<?php echo $filtre_statut; ?>" class="btn-search" style="background: #DC2626; padding: 6px 12px;">
                         <i class="fas fa-times"></i>
                     </a>
                 <?php endif; ?>
@@ -1017,6 +1031,12 @@ $page_title = 'Historique - PharmaGeo';
                                                 <small class="text-muted">
                                                     <i class="fas fa-box me-1"></i> Quantité: <?php echo $item['Quantite']; ?>
                                                 </small>
+                                                <?php $montantDisplay = $item['Montant'] !== null && $item['Montant'] !== '' ? (float)$item['Montant'] : ((!empty($item['prix_unitaire'])) ? (float)$item['prix_unitaire'] * (int)$item['Quantite'] : null); ?>
+                                                <?php if ($montantDisplay !== null): ?>
+                                                    <small class="d-block fw-semibold" style="color: #16A34A;">
+                                                        <i class="fas fa-money-bill-wave me-1"></i> Montant: <?php echo number_format($montantDisplay, 0, ',', ' ') . ' FCFA'; ?>
+                                                    </small>
+                                                <?php endif; ?>
                                             </div>
                                         <?php else: ?>
                                             <div>
@@ -1067,38 +1087,11 @@ $page_title = 'Historique - PharmaGeo';
                 </div>
 
                 <!-- ===== PAGINATION ===== -->
-                <?php if ($total_pages > 1): ?>
-                    <div class="pagination-custom">
-                        <?php if ($page > 1): ?>
-                            <a href="<?php echo BASE_URL; ?>pages/patient/historique.php?page=<?php echo $page - 1; ?>&type=<?php echo $filtre_type; ?>&statut=<?php echo $filtre_statut; ?>&search=<?php echo urlencode($search); ?>" 
-                               class="page-link-custom">
-                                <i class="fas fa-chevron-left"></i> Précédent
-                            </a>
-                        <?php else: ?>
-                            <span class="page-link-custom disabled">
-                                <i class="fas fa-chevron-left"></i> Précédent
-                            </span>
-                        <?php endif; ?>
-
-                        <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                            <a href="<?php echo BASE_URL; ?>pages/patient/historique.php?page=<?php echo $i; ?>&type=<?php echo $filtre_type; ?>&statut=<?php echo $filtre_statut; ?>&search=<?php echo urlencode($search); ?>" 
-                               class="page-link-custom <?php echo $i === $page ? 'active' : ''; ?>">
-                                <?php echo $i; ?>
-                            </a>
-                        <?php endfor; ?>
-
-                        <?php if ($page < $total_pages): ?>
-                            <a href="<?php echo BASE_URL; ?>pages/patient/historique.php?page=<?php echo $page + 1; ?>&type=<?php echo $filtre_type; ?>&statut=<?php echo $filtre_statut; ?>&search=<?php echo urlencode($search); ?>" 
-                               class="page-link-custom">
-                                Suivant <i class="fas fa-chevron-right"></i>
-                            </a>
-                        <?php else: ?>
-                            <span class="page-link-custom disabled">
-                                Suivant <i class="fas fa-chevron-right"></i>
-                            </span>
-                        <?php endif; ?>
-                    </div>
-                <?php endif; ?>
+                <?php pagination_afficher($pagination, [
+                    'type'   => $filtre_type,
+                    'statut' => $filtre_statut,
+                    'search' => $search
+                ], 'éléments d\'historique'); ?>
 
             <?php else: ?>
                 <div class="empty-state">
@@ -1116,7 +1109,7 @@ $page_title = 'Historique - PharmaGeo';
                         <?php endif; ?>
                     </p>
                     <?php if ($filtre_type !== 'recherches'): ?>
-                        <a href="<?php echo BASE_URL; ?>pages/patient/recherche.php" class="btn btn-primary-custom mt-3" style="display: inline-block; padding: 10px 28px; border-radius: 50px; background: linear-gradient(135deg, rgb(42,195,42), hsl(25,75%,47%)); color: white; text-decoration: none; font-weight: 600; transition: var(--transition);">
+                        <a href="<?php echo BASE_URL; ?>pages/patient/recherche.php" class="btn btn-primary-custom mt-3" style="display: inline-block; padding: 10px 28px; border-radius: 50px; background: linear-gradient(135deg, #16A34A, #166534); color: white; text-decoration: none; font-weight: 600; transition: var(--transition);">
                             <i class="fas fa-search me-1"></i> Commencer une recherche
                         </a>
                     <?php endif; ?>
@@ -1201,7 +1194,7 @@ $page_title = 'Historique - PharmaGeo';
             animateStats();
 
             // ===== CONSOLE LOG =====
-            console.log('%c PharmaGeo - Historique ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c PharmaGeo - Historique ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
             console.log('%c Consultez toutes vos recherches et réservations.', 'color: #666; font-size: 14px;');
 
         });

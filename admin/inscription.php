@@ -86,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         // Vérifier si l'email existe déjà
         try {
-            $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM utilisateur WHERE Email = :email");
+            $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM utilisateur WHERE LOWER(Email) = LOWER(:email)");
             $stmt->execute([':email' => $form_data['email']]);
             if ($stmt->fetch()['total'] > 0) {
                 $errors[] = "Cette adresse email est déjà utilisée.";
@@ -193,15 +193,15 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-md: 0 8px 40px rgba(0,0,0,0.10);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.15);
             --shadow-xl: 0 30px 80px rgba(0,0,0,0.20);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.25);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.25);
             --radius: 20px;
             --radius-lg: 28px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -220,7 +220,7 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, rgba(42, 195, 42, 0.92), rgba(200, 120, 30, 0.88));
+            background: linear-gradient(135deg, rgba(22,163,74, 0.92), rgba(21,128,61, 0.88));
             padding: 20px;
             position: relative;
         }
@@ -234,7 +234,7 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
             width: 100%;
             height: 100%;
             background-image: 
-                url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900"%3E%3Cdefs%3E%3ClinearGradient id="a" x1="0%25" y1="0%25" x2="100%25" y2="100%25"%3E%3Cstop offset="0%25" style="stop-color:%2342c942;stop-opacity:0.3"/%3E%3Cstop offset="100%25" style="stop-color:%23c8781e;stop-opacity:0.3"/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill="%23f0f2f5" width="1440" height="900"/%3E%3Ccircle cx="200" cy="200" r="300" fill="rgba(42,195,42,0.08)"/%3E%3Ccircle cx="1200" cy="150" r="400" fill="rgba(200,120,30,0.06)"/%3E%3Ccircle cx="700" cy="700" r="350" fill="rgba(42,195,42,0.05)"/%3E%3Ccircle cx="100" cy="600" r="200" fill="rgba(200,120,30,0.04)"/%3E%3C/svg%3E');
+                url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900"%3E%3Cdefs%3E%3ClinearGradient id="a" x1="0%25" y1="0%25" x2="100%25" y2="100%25"%3E%3Cstop offset="0%25" style="stop-color:%2342c942;stop-opacity:0.3"/%3E%3Cstop offset="100%25" style="stop-color:%23c8781e;stop-opacity:0.3"/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill="%23f0f2f5" width="1440" height="900"/%3E%3Ccircle cx="200" cy="200" r="300" fill="rgba(22,163,74,0.08)"/%3E%3Ccircle cx="1200" cy="150" r="400" fill="rgba(21,128,61,0.06)"/%3E%3Ccircle cx="700" cy="700" r="350" fill="rgba(22,163,74,0.05)"/%3E%3Ccircle cx="100" cy="600" r="200" fill="rgba(21,128,61,0.04)"/%3E%3C/svg%3E');
             background-size: cover;
             background-position: center;
             opacity: 0.5;
@@ -248,7 +248,7 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(135deg, rgba(42, 195, 42, 0.85), rgba(200, 120, 30, 0.80));
+            background: linear-gradient(135deg, rgba(22,163,74, 0.85), rgba(21,128,61, 0.80));
             z-index: 1;
         }
 
@@ -308,20 +308,28 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
 
         /* ===== HEADER ===== */
         .register-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 14px;
             text-align: center;
             margin-bottom: 30px;
         }
 
         .register-header .logo {
-            display: inline-block;
+            width: 56px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
-            padding: 15px 18px;
             border-radius: 16px;
             color: white;
-            font-size: 2rem;
-            margin-bottom: 16px;
+            font-size: 1.6rem;
             box-shadow: var(--shadow-glow-green);
             transition: var(--transition);
+            flex-shrink: 0;
         }
 
         .register-header .logo:hover {
@@ -332,7 +340,7 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
             font-size: 1.8rem;
             font-weight: 800;
             color: var(--dark-text);
-            margin-bottom: 6px;
+            margin: 0;
         }
 
         .register-header h1 .highlight {
@@ -343,6 +351,7 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
         }
 
         .register-header p {
+            flex-basis: 100%;
             color: var(--gray-text);
             font-size: 0.95rem;
             margin-bottom: 0;
@@ -350,7 +359,7 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
 
         .register-header .admin-badge {
             display: inline-block;
-            background: rgba(42, 195, 42, 0.1);
+            background: rgba(22,163,74, 0.1);
             color: var(--primary-green);
             padding: 6px 18px;
             border-radius: 50px;
@@ -358,7 +367,7 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
             font-weight: 600;
             letter-spacing: 0.5px;
             margin-top: 10px;
-            border: 1px solid rgba(42, 195, 42, 0.15);
+            border: 1px solid rgba(22,163,74, 0.15);
         }
 
         .register-header .admin-badge i {
@@ -383,21 +392,21 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
         }
 
         .alert-custom-success {
-            background: rgba(42, 195, 42, 0.08);
+            background: rgba(22,163,74, 0.08);
             color: var(--primary-green);
             border-left: 4px solid var(--primary-green);
         }
 
         .alert-custom-danger {
-            background: rgba(231, 76, 60, 0.08);
-            color: #e74c3c;
-            border-left: 4px solid #e74c3c;
+            background: rgba(220,38,38, 0.08);
+            color: #DC2626;
+            border-left: 4px solid #DC2626;
         }
 
         .alert-custom-info {
-            background: rgba(52, 152, 219, 0.08);
-            color: #3498db;
-            border-left: 4px solid #3498db;
+            background: rgba(22,83,52, 0.08);
+            color: #166534;
+            border-left: 4px solid #166534;
         }
 
         /* ===== FORMULAIRE ===== */
@@ -413,7 +422,7 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
         }
 
         .form-modern .form-label .required {
-            color: #e74c3c;
+            color: #DC2626;
             margin-left: 2px;
         }
 
@@ -434,28 +443,28 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
 
         .form-modern .input-group-custom .form-control {
             padding: 12px 16px 12px 44px;
-            border: 2px solid #e8ecf1;
+            border: 2px solid #D9E9DF;
             border-radius: 14px;
             font-size: 0.95rem;
             transition: var(--transition);
-            background: #f8f9fa;
+            background: #F0FDF4;
             color: var(--dark-text);
         }
 
         .form-modern .input-group-custom .form-control:focus {
             border-color: var(--primary-green);
-            box-shadow: 0 0 0 4px rgba(42, 195, 42, 0.1);
+            box-shadow: 0 0 0 4px rgba(22,163,74, 0.1);
             background: var(--white);
         }
 
         .form-modern .input-group-custom .form-control.is-invalid {
-            border-color: #e74c3c;
-            box-shadow: 0 0 0 4px rgba(231, 76, 60, 0.1);
+            border-color: #DC2626;
+            box-shadow: 0 0 0 4px rgba(220,38,38, 0.1);
         }
 
         .form-modern .input-group-custom .form-control.is-valid {
             border-color: var(--primary-green);
-            box-shadow: 0 0 0 4px rgba(42, 195, 42, 0.1);
+            box-shadow: 0 0 0 4px rgba(22,163,74, 0.1);
         }
 
         .form-modern .input-group-custom .toggle-password {
@@ -496,18 +505,18 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
             font-size: 0.75rem;
             padding: 2px 10px;
             border-radius: 50px;
-            background: #f0f0f0;
+            background: #F0FDF4;
             transition: var(--transition);
         }
 
         .form-modern .form-text .requirements .req-item.valid {
-            background: rgba(42, 195, 42, 0.1);
+            background: rgba(22,163,74, 0.1);
             color: var(--primary-green);
         }
 
         .form-modern .form-text .requirements .req-item.invalid {
-            background: rgba(231, 76, 60, 0.1);
-            color: #e74c3c;
+            background: rgba(220,38,38, 0.1);
+            color: #DC2626;
         }
 
         /* ===== BOUTONS ===== */
@@ -530,7 +539,7 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
 
         .btn-primary-custom:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 40px rgba(42, 195, 42, 0.4);
+            box-shadow: 0 12px 40px rgba(22,163,74, 0.4);
             color: white;
         }
 
@@ -574,7 +583,7 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
         .password-strength {
             height: 4px;
             border-radius: 4px;
-            background: #e8ecf1;
+            background: #D9E9DF;
             margin-top: 8px;
             overflow: hidden;
             transition: var(--transition);
@@ -587,9 +596,9 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
             transition: width 0.4s ease, background 0.4s ease;
         }
 
-        .password-strength .bar.weak { width: 25%; background: #e74c3c; }
-        .password-strength .bar.medium { width: 50%; background: #f39c12; }
-        .password-strength .bar.good { width: 75%; background: #2ecc71; }
+        .password-strength .bar.weak { width: 25%; background: #DC2626; }
+        .password-strength .bar.medium { width: 50%; background: #166534; }
+        .password-strength .bar.good { width: 75%; background: #16A34A; }
         .password-strength .bar.strong { width: 100%; background: var(--primary-green); }
 
         .password-strength-label {
@@ -658,7 +667,7 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
             .register-header .logo {
                 padding: 12px 15px;
                 font-size: 1.6rem;
-            }
+             color: #fff;}
 
             .form-modern .input-group-custom .form-control {
                 padding: 10px 14px 10px 38px;
@@ -692,7 +701,7 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
             .register-header .logo {
                 padding: 10px 12px;
                 font-size: 1.3rem;
-            }
+             color: #fff;}
         }
 
         /* ===== SPINNER ===== */
@@ -718,7 +727,8 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
             display: inline-block;
         }
     </style>
-    <link rel="stylesheet" href="../assets/css/responsive.css">
+    <link rel="stylesheet" href="../assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -734,12 +744,12 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
         
         <!-- ===== HEADER ===== -->
         <div class="register-header">
-            <div class="logo animate-float">
+            <a href="<?php echo BASE_URL; ?>index.php" style="text-decoration: none; color: inherit;"><div class="logo animate-float">
                 <i class="fas fa-hospital"></i>
             </div>
             <h1>
                 <span class="highlight">PharmaGeo</span>
-            </h1>
+            </h1></a>
             <p>Création du compte administrateur</p>
             <div class="admin-badge">
                 <i class="fas fa-crown"></i> Accès réservé à l'administrateur
@@ -849,7 +859,7 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
             <!-- Téléphone -->
             <div class="form-group">
                 <label for="telephone" class="form-label">
-                    Téléphone <span style="color: #6c757d; font-weight: 400;">(optionnel)</span>
+                    Téléphone <span style="color: #64748B; font-weight: 400;">(optionnel)</span>
                 </label>
                 <div class="input-group-custom">
                     <span class="input-icon"><i class="fas fa-phone"></i></span>
@@ -929,7 +939,7 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
                 <i class="fas fa-arrow-left me-1"></i>
                 <a href="<?php echo BASE_URL; ?>index.php">Retour à l'accueil</a>
             </p>
-            <p class="mt-2" style="font-size: 0.8rem; color: #adb5bd;">
+            <p class="mt-2" style="font-size: 0.8rem; color: #64748B;">
                 <i class="fas fa-shield-alt me-1"></i>
                 Toutes les données sont sécurisées et chiffrées
             </p>
@@ -1002,28 +1012,28 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
                     strengthLabel.textContent = '';
                 } else if (score <= 1) {
                     strength = 'Faible';
-                    color = '#e74c3c';
+                    color = '#DC2626';
                     strengthBar.className = 'bar weak';
                     strengthLabel.textContent = '⚠️ Mot de passe faible';
-                    strengthLabel.style.color = '#e74c3c';
+                    strengthLabel.style.color = '#DC2626';
                 } else if (score === 2) {
                     strength = 'Moyen';
-                    color = '#f39c12';
+                    color = '#DC2626';
                     strengthBar.className = 'bar medium';
                     strengthLabel.textContent = '⚠️ Mot de passe moyen';
-                    strengthLabel.style.color = '#f39c12';
+                    strengthLabel.style.color = '#DC2626';
                 } else if (score === 3) {
                     strength = 'Bon';
-                    color = '#2ecc71';
+                    color = '#16A34A';
                     strengthBar.className = 'bar good';
                     strengthLabel.textContent = '✅ Mot de passe bon';
-                    strengthLabel.style.color = '#2ecc71';
+                    strengthLabel.style.color = '#16A34A';
                 } else if (score === 4) {
                     strength = 'Fort';
-                    color = '#27ae60';
+                    color = '#16A34A';
                     strengthBar.className = 'bar strong';
                     strengthLabel.textContent = '✅ Mot de passe fort';
-                    strengthLabel.style.color = '#27ae60';
+                    strengthLabel.style.color = '#16A34A';
                 }
 
                 return checks;
@@ -1063,8 +1073,8 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
                     confirmPasswordInput.classList.remove('is-invalid');
                     confirmPasswordInput.classList.add('is-valid');
                 } else {
-                    passwordMatch.innerHTML = '<i class="fas fa-exclamation-circle" style="color: #e74c3c;"></i> Les mots de passe ne correspondent pas';
-                    passwordMatch.style.color = '#e74c3c';
+                    passwordMatch.innerHTML = '<i class="fas fa-exclamation-circle" style="color: #DC2626;"></i> Les mots de passe ne correspondent pas';
+                    passwordMatch.style.color = '#DC2626';
                     confirmPasswordInput.classList.remove('is-valid');
                     confirmPasswordInput.classList.add('is-invalid');
                 }
@@ -1120,7 +1130,7 @@ $page_title = 'Inscription Administrateur - PharmaGeo';
             });
 
             // ===== CONSOLE LOG =====
-            console.log('%c PharmaGeo - Inscription Administrateur ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+            console.log('%c PharmaGeo - Inscription Administrateur ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
             console.log('%c Cette page est réservée à la création du compte administrateur principal.', 'color: #666; font-size: 13px;');
 
         });

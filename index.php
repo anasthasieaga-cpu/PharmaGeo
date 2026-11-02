@@ -34,11 +34,19 @@ function aRole($role) {
     return isset($_SESSION['role']) && $_SESSION['role'] === $role;
 }
 
+function lienDashboard() {
+    switch ($_SESSION['role'] ?? '') {
+        case 'administrateur': return 'admin/dashboard.php';
+        case 'pharmacien': return 'pharmacien/dashboard.php';
+        default: return 'pages/patient/dashboard.php';
+    }
+}
+
 // ===== RÉCUPÉRATION DES STATISTIQUES =====
 try {
     $stats = [
         'pharmacies' => $pdo->query("SELECT COUNT(*) as total FROM pharmacie WHERE Statut = 'active'")->fetch(),
-        'medicaments' => $pdo->query("SELECT COUNT(DISTINCT m.Id_medicament) as total FROM medicament m JOIN stock s ON m.Id_medicament = s.Id_medicament WHERE s.Quantite > 0 AND s.Statut = 'disponible'")->fetch(),
+        'medicaments' => $pdo->query("SELECT COUNT(DISTINCT m.Id_medicament) as total FROM medicament m JOIN stock s ON m.Id_medicament = s.Id_medicament WHERE m.Statut = 'actif' AND s.Quantite > 0 AND s.Statut = 'disponible'")->fetch(),
         'utilisateurs' => $pdo->query("SELECT COUNT(*) as total FROM utilisateur WHERE Role = 'patient' AND Statut = 'actif'")->fetch(),
         'pharmaciens' => $pdo->query("SELECT COUNT(*) as total FROM pharmacien WHERE Statut_validation = 'valide'")->fetch(),
         'reservations' => $pdo->query("SELECT COUNT(*) as total FROM reservation WHERE Statut = 'confirmee'")->fetch()
@@ -60,7 +68,7 @@ try {
         FROM medicament m
         JOIN stock s ON m.Id_medicament = s.Id_medicament
         JOIN reservation r ON s.Id_stock = r.Id_stock
-        WHERE r.Statut = 'confirmee'
+        WHERE m.Statut = 'actif' AND r.Statut = 'confirmee'
         GROUP BY m.Id_medicament
         ORDER BY total_reservations DESC
         LIMIT 6
@@ -96,7 +104,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
     <title><?php echo htmlspecialchars($page_title); ?></title>
     <meta name="description" content="<?php echo htmlspecialchars($page_description); ?>">
     <meta name="robots" content="index, follow">
-    <meta name="theme-color" content="#2ac32a">
+    <meta name="theme-color" content="#16A34A">
     <link rel="canonical" href="<?php echo BASE_URL; ?>">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%232ac32a'/%3E%3Ctext x='50' y='68' text-anchor='middle' font-size='58' font-family='Arial' fill='white'%3E%2B%3C/text%3E%3C/svg%3E">
 
@@ -134,19 +142,19 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
            VARIABLES & RESET
            ============================================================ */
         :root {
-            --primary-green: #2ac32a;
-            --primary-green-dark: #1e8e1e;
-            --primary-orange: #d4880f;
-            --primary-orange-dark: #b3740d;
+            --primary-green: #16A34A;
+            --primary-green-dark: #166534;
+            --primary-orange: #B91C1C;
+            --primary-orange-dark: #B91C1C;
             --white: #ffffff;
-            --light-bg: #f0f4f8;
-            --dark-text: #0a1628;
+            --light-bg: #F0FDF4;
+            --dark-text: #0F2E19;
             --gray-text: #64748b;
             --shadow-sm: 0 2px 12px rgba(0,0,0,0.06);
             --shadow-md: 0 8px 30px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
             --shadow-xl: 0 30px 80px rgba(0,0,0,0.18);
-            --shadow-glow-green: 0 8px 40px rgba(42,195,42,0.30);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74,0.30);
             --shadow-glow-orange: 0 8px 40px rgba(212,136,15,0.25);
             --transition: all 0.5s cubic-bezier(0.23,1,0.32,1);
             --radius: 20px;
@@ -328,7 +336,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
         }
         .back-to-top:hover {
             transform: translateY(-6px);
-            box-shadow: 0 12px 45px rgba(42,195,42,0.45);
+            box-shadow: 0 12px 45px rgba(22,163,74,0.45);
         }
         @media (max-width: 768px) {
             .back-to-top { bottom: 90px; right: 18px; width: 46px; height: 46px; font-size: 1rem; }
@@ -380,7 +388,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
             border-color: var(--primary-green) !important;
         }
         .navbar-toggler-icon {
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cpath stroke='rgb(42,195,42)' stroke-width='2.5' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E") !important;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cpath stroke='#16A34A' stroke-width='2.5' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E") !important;
         }
         .nav-link-custom {
             font-weight: 500;
@@ -393,7 +401,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
         }
         .nav-link-custom:hover, .nav-link-custom.active {
             color: var(--primary-green);
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
         }
         .nav-link-custom::after {
             content: '';
@@ -422,7 +430,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
         }
         .btn-nav-connect:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 40px rgba(42,195,42,0.45);
+            box-shadow: 0 12px 40px rgba(22,163,74,0.45);
             color: white !important;
         }
         .btn-nav-register {
@@ -489,7 +497,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
         .hero-slider .swiper-slide .slide-overlay {
             position: absolute;
             inset: 0;
-            background: linear-gradient(100deg, rgba(6,14,26,0.90) 0%, rgba(8,20,18,0.72) 32%, rgba(42,195,42,0.55) 68%, rgba(212,136,15,0.55) 100%);
+            background: linear-gradient(100deg, rgba(6,14,26,0.90) 0%, rgba(8,20,18,0.72) 32%, rgba(22,163,74,0.55) 68%, rgba(212,136,15,0.55) 100%);
             z-index: 1;
         }
         .hero-slider .swiper-slide .slide-pattern {
@@ -752,7 +760,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
         }
         .stat-card:hover .icon-wrapper { transform: scale(1.08) rotate(-4deg); }
         .stat-card .icon-wrapper.green {
-            background: linear-gradient(135deg, rgba(42,195,42,0.10), rgba(42,195,42,0.04));
+            background: linear-gradient(135deg, rgba(22,163,74,0.10), rgba(22,163,74,0.04));
             color: var(--primary-green);
         }
         .stat-card .icon-wrapper.orange {
@@ -760,19 +768,19 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
             color: var(--primary-orange);
         }
         .stat-card .icon-wrapper.blue {
-            background: linear-gradient(135deg, rgba(52,152,219,0.10), rgba(52,152,219,0.04));
-            color: #3498db;
+            background: linear-gradient(135deg, rgba(22,83,52,0.10), rgba(22,83,52,0.04));
+            color: #166534;
         }
         .stat-card .icon-wrapper.purple {
             background: linear-gradient(135deg, rgba(155,89,182,0.10), rgba(155,89,182,0.04));
-            color: #9b59b6;
+            color: #1F2937;
         }
         .stat-card .stat-number {
             font-size: 2.8rem;
             font-weight: 900;
             color: var(--dark-text);
             line-height: 1.1;
-            background: linear-gradient(135deg, var(--dark-text), #334155);
+            background: linear-gradient(135deg, var(--dark-text), #1F2937);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -795,11 +803,11 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
         }
         .stat-card .stat-trend.up {
             color: var(--primary-green);
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
         }
         .stat-card .stat-trend.down {
-            color: #e74c3c;
-            background: rgba(231,76,60,0.08);
+            color: #DC2626;
+            background: rgba(220,38,38,0.08);
         }
 
         /* ============================================================
@@ -835,7 +843,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
             box-shadow: var(--shadow-sm);
         }
         .section-badge.green {
-            background: rgba(42,195,42,0.10);
+            background: rgba(22,163,74,0.10);
             color: var(--primary-green);
         }
         .section-badge.orange {
@@ -882,7 +890,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
             width: 56px;
             height: 56px;
             border-radius: var(--radius-sm);
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -920,7 +928,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
             align-items: center;
             gap: 6px;
             padding: 4px 16px;
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
             border-radius: 50px;
         }
         .medicament-card:hover .medicament-count {
@@ -950,7 +958,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
             width: 60px;
             height: 60px;
             border-radius: var(--radius-sm);
-            background: linear-gradient(135deg, rgba(42,195,42,0.08), rgba(212,136,15,0.08));
+            background: linear-gradient(135deg, rgba(22,163,74,0.08), rgba(212,136,15,0.08));
             display: flex;
             align-items: center;
             justify-content: center;
@@ -969,7 +977,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
             color: var(--gray-text);
         }
         .pharmacy-card .pharmacy-badge {
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
             color: var(--primary-green);
             padding: 4px 16px;
             border-radius: 50px;
@@ -1077,7 +1085,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
         }
         .feature-card:hover .icon-wrapper { transform: scale(1.08) rotate(-4deg); }
         .feature-card .icon-wrapper.green {
-            background: linear-gradient(135deg, rgba(42,195,42,0.10), rgba(42,195,42,0.04));
+            background: linear-gradient(135deg, rgba(22,163,74,0.10), rgba(22,163,74,0.04));
             color: var(--primary-green);
         }
         .feature-card .icon-wrapper.orange {
@@ -1085,12 +1093,12 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
             color: var(--primary-orange);
         }
         .feature-card .icon-wrapper.blue {
-            background: linear-gradient(135deg, rgba(52,152,219,0.10), rgba(52,152,219,0.04));
-            color: #3498db;
+            background: linear-gradient(135deg, rgba(22,83,52,0.10), rgba(22,83,52,0.04));
+            color: #166534;
         }
         .feature-card .icon-wrapper.purple {
             background: linear-gradient(135deg, rgba(155,89,182,0.10), rgba(155,89,182,0.04));
-            color: #9b59b6;
+            color: #1F2937;
         }
         .feature-card .feature-title {
             font-weight: 700;
@@ -1150,7 +1158,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
             color: var(--gray-text);
         }
         .testimonial-card .testimonial-stars {
-            color: #f1c40f;
+            color: #DC2626;
             font-size: 0.9rem;
             letter-spacing: 2px;
         }
@@ -1176,7 +1184,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
         .cta-section .cta-overlay {
             position: absolute;
             inset: 0;
-            background: linear-gradient(135deg, rgba(42,195,42,0.92), rgba(212,136,15,0.88));
+            background: linear-gradient(135deg, rgba(22,163,74,0.92), rgba(212,136,15,0.88));
             z-index: 1;
         }
         .cta-section .cta-pattern {
@@ -1249,7 +1257,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
            FOOTER
            ============================================================ */
         .footer-custom {
-            background: #0a1628;
+            background: #0F2E19;
             color: rgba(255,255,255,0.70);
             padding: 70px 0 30px;
             position: relative;
@@ -1514,7 +1522,8 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
             .testimonial-card { padding: 24px 20px; }
         }
     </style>
-    <link rel="stylesheet" href="assets/css/responsive.css">
+    <link rel="stylesheet" href="assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -1552,7 +1561,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
                     </li>
                     <?php if (estConnecte()): ?>
                         <li class="nav-item">
-                            <a class="nav-link nav-link-custom" href="<?php echo BASE_URL; ?>pages/patient/dashboard.php">
+                            <a class="nav-link nav-link-custom" href="<?php echo BASE_URL . lienDashboard(); ?>">
                                 <i class="fas fa-user me-1"></i>Dashboard
                             </a>
                         </li>
@@ -1644,7 +1653,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
                     </p>
                     
                     <form action="<?php echo BASE_URL; ?>pages/patient/recherche.php" method="GET" class="hero-search animate-fade-up delay-3" id="heroSearchForm">
-                        <input type="text" name="q" class="form-control" placeholder="Recherchez un médicament..." aria-label="Rechercher un médicament" required>
+                        <input type="text" name="q" class="form-control" placeholder="Paracétamol, Amoxicilline... (plusieurs médicaments possible)" aria-label="Rechercher un ou plusieurs médicaments (séparés par des virgules)" required>
                         <button type="submit" class="btn-search" id="heroSearchBtn">
                             <i class="fas fa-search"></i>
                             <span class="btn-search-label">Rechercher</span>
@@ -1909,117 +1918,6 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
         </div>
     </section>
     <?php endif; ?>
-
-    <!-- ============================================================
-    TESTIMONIALS SECTION
-    ============================================================ -->
-    <section class="testimonials-section">
-        <div class="container">
-            <div class="text-center mb-5" data-aos="fade-up">
-                <span class="section-badge green">
-                    <i class="fas fa-quote-left me-1"></i> Témoignages
-                </span>
-                <h2 class="section-title mt-3">
-                    Ce que nos <span class="highlight">patients</span> disent
-                </h2>
-                <p class="section-subtitle">
-                    Découvrez les retours de ceux qui utilisent déjà PharmaGeo
-                </p>
-            </div>
-            
-            <div class="row g-4">
-                <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="0">
-                    <div class="testimonial-card">
-                        <div class="d-flex align-items-start gap-3 mb-3">
-                            <div class="testimonial-avatar">MF</div>
-                            <div>
-                                <div class="testimonial-name">Mireille F.</div>
-                                <div class="testimonial-role">Patiente à Porto-Novo</div>
-                                <div class="testimonial-stars">
-                                    <i class="fas fa-star"></i>
-                                    <i class="fas fa-star"></i>
-                                    <i class="fas fa-star"></i>
-                                    <i class="fas fa-star"></i>
-                                    <i class="fas fa-star"></i>
-                                </div>
-                            </div>
-                        </div>
-                        <p class="testimonial-text">
-                            "Grâce à PharmaGeo, j'ai trouvé rapidement une pharmacie qui avait le médicament dont j'avais besoin. 
-                            Un vrai gain de temps !"
-                        </p>
-                    </div>
-                </div>
-                
-                <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="100">
-                    <div class="testimonial-card">
-                        <div class="d-flex align-items-start gap-3 mb-3">
-                            <div class="testimonial-avatar">JK</div>
-                            <div>
-                                <div class="testimonial-name">Jean K.</div>
-                                <div class="testimonial-role">Patient à Porto-Novo</div>
-                                <div class="testimonial-stars">
-                                    <i class="fas fa-star"></i>
-                                    <i class="fas fa-star"></i>
-                                    <i class="fas fa-star"></i>
-                                    <i class="fas fa-star"></i>
-                                    <i class="fas fa-star"></i>
-                                </div>
-                            </div>
-                        </div>
-                        <p class="testimonial-text">
-                            "La carte interactive est très pratique. Je peux voir toutes les pharmacies autour de moi et choisir 
-                            celle qui est la plus proche."
-                        </p>
-                    </div>
-                </div>
-                
-                <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="200">
-                    <div class="testimonial-card">
-                        <div class="d-flex align-items-start gap-3 mb-3">
-                            <div class="testimonial-avatar">AD</div>
-                            <div>
-                                <div class="testimonial-name">Aminata D.</div>
-                                <div class="testimonial-role">Patiente à Porto-Novo</div>
-                                <div class="testimonial-stars">
-                                    <i class="fas fa-star"></i>
-                                    <i class="fas fa-star"></i>
-                                    <i class="fas fa-star"></i>
-                                    <i class="fas fa-star"></i>
-                                    <i class="fas fa-star-half-alt"></i>
-                                </div>
-                            </div>
-                        </div>
-                        <p class="testimonial-text">
-                            "J'ai pu réserver mes médicaments en ligne et les récupérer à la pharmacie sans faire la queue. 
-                            Une vraie révolution !"
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- ============================================================
-    CTA SECTION
-    ============================================================ -->
-    <section class="cta-section" id="cta">
-        <div class="cta-bg-image"></div>
-        <div class="cta-overlay"></div>
-        <div class="cta-pattern"></div>
-        
-        <div class="container position-relative">
-            <div class="cta-content">
-                <div class="row align-items-center">
-                    <div class="col-lg-8" data-aos="fade-right">
-                        <h2 class="cta-title">
-                            Prêt à <span style="color: rgba(255,255,255,0.70);">trouver</span> vos médicaments ?
-                        </h2>
-                        <p class="cta-subtitle">
-                            Rejoignez des milliers de patients qui utilisent PharmaGeo pour accéder 
-                            rapidement aux médicaments dont ils ont besoin.
-                        </p>
-                    </div>
                     <div class="col-lg-4 text-lg-end mt-4 mt-lg-0" data-aos="fade-left">
                         <?php if (estConnecte()): ?>
                             <a href="<?php echo BASE_URL; ?>pages/patient/recherche.php" class="btn-cta">
@@ -2046,10 +1944,10 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
         <div class="container">
             <div class="row g-4">
                 <div class="col-lg-4">
-                    <div class="footer-brand">
+                    <a href="<?php echo BASE_URL; ?>index.php" class="footer-brand" style="text-decoration: none;">
                         <span class="brand-icon"><i class="fas fa-hospital"></i></span>
                         PharmaGeo
-                    </div>
+                    </a>
                     <p class="footer-description mt-3">
                         Plateforme intelligente de géolocalisation des pharmacies et de recherche de disponibilité des médicaments à Porto-Novo.
                     </p>
@@ -2091,7 +1989,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
             <div class="footer-bottom text-center">
                 <p class="mb-0">
                     &copy; <?php echo date('Y'); ?> PharmaGeo. Tous droits réservés. 
-                    Conçu avec <i class="fas fa-heart" style="color: #e74c3c;"></i> pour la santé à Porto-Novo.
+                    Conçu avec <i class="fas fa-heart" style="color: #DC2626;"></i> pour la santé à Porto-Novo.
                     <span class="d-block d-md-inline mt-1 mt-md-0">
                         <i class="fas fa-code"></i> Version 2.0
                     </span>
@@ -2374,7 +2272,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
         // ============================================================
         // CONSOLE BRANDING
         // ============================================================
-        console.log('%c PharmaGeo v2.0 ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 22px; font-weight: bold; padding: 14px 28px; border-radius: 10px;');
+        console.log('%c PharmaGeo v2.0 ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 22px; font-weight: bold; padding: 14px 28px; border-radius: 10px;');
         console.log('%c Plateforme de géolocalisation des pharmacies - Porto-Novo ', 'color: #64748b; font-size: 14px;');
     </script>
 </body>

@@ -1,12 +1,41 @@
-/* ===== Variables Couleurs ===== */
+/* ===== Palette PharmaGeo =====
+   Identite visuelle verte et blanche d'une plateforme de pharmacie.
+   Le rouge est reserve aux erreurs, alertes et medicaments
+   indisponibles : il ne sert jamais de couleur decorative. */
 :root {
-    --primary-green: rgb(42, 195, 42);
-    --primary-orange: hsl(25, 75%, 47%);
-    --white: #fff;
-    --light-gray: #f8f9fa;
-    --dark: #2d3436;
-    --shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-    --shadow-hover: 0 15px 40px rgba(0, 0, 0, 0.15);
+    /* Vert medical moderne */
+    --pg-primary: #16A34A;
+    /* Vert fonce */
+    --pg-dark: #166534;
+    /* Blanc */
+    --pg-white: #FFFFFF;
+    /* Vert tres clair */
+    --pg-bg-soft: #F0FDF4;
+    /* Gris tres fonce */
+    --pg-text: #1F2937;
+    /* Gris */
+    --pg-text-soft: #64748B;
+    /* Rouge : erreurs, alertes, indisponible */
+    --pg-danger: #DC2626;
+
+    /* Nuances derivees */
+    --pg-primary-soft: #DCFCE7;
+    --pg-border: #D9E9DF;
+    --pg-dark-hover: #14532D;
+}
+
+/* Noms historiques conserves : ils sont utilises dans les feuilles
+   de style internes des pages. */
+:root {
+    --primary-green: var(--pg-primary);
+    --primary-orange: var(--pg-dark);
+    --white: var(--pg-white);
+    --light-gray: var(--pg-bg-soft);
+    --dark: var(--pg-text);
+    --gray-text: var(--pg-text-soft);
+    --danger: var(--pg-danger);
+    --shadow: 0 10px 30px rgba(22, 83, 52, 0.08);
+    --shadow-hover: 0 15px 40px rgba(22, 83, 52, 0.14);
 }
 
 /* ===== Global ===== */
@@ -86,9 +115,9 @@ body {
 }
 
 .btn-primary-custom:hover {
-    background: hsl(120, 55%, 35%);
+    background: #166534;
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(42, 195, 42, 0.4);
+    box-shadow: 0 5px 15px rgba(22,163,74, 0.4);
     color: var(--white);
 }
 
@@ -103,9 +132,9 @@ body {
 }
 
 .btn-secondary-custom:hover {
-    background: hsl(25, 65%, 37%);
+    background: #14532D;
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(200, 120, 30, 0.4);
+    box-shadow: 0 5px 15px rgba(21,128,61, 0.4);
     color: var(--white);
 }
 
@@ -125,19 +154,23 @@ body {
     transform: translateY(-2px);
 }
 
-/* ===== Badges ===== */
+/* ===== Badges =====
+   Vert : disponible, confirme.
+   Rouge : rupture, stock faible et refus, car le rouge est reserve
+   aux erreurs, alertes et medicaments indisponibles.
+   Vert fonce : en attente, qui n'est ni une erreur ni un succes. */
 .badge-status {
     padding: 6px 14px;
     border-radius: 50px;
     font-weight: 500;
 }
 
-.badge-disponible { background: var(--primary-green); color: var(--white); }
-.badge-rupture { background: #e74c3c; color: var(--white); }
-.badge-faible { background: var(--primary-orange); color: var(--white); }
-.badge-attente { background: #f39c12; color: var(--white); }
-.badge-confirme { background: #2ecc71; color: var(--white); }
-.badge-refuse { background: #e74c3c; color: var(--white); }
+.badge-disponible { background: var(--pg-primary); color: var(--pg-white); }
+.badge-rupture { background: #B91C1C; color: var(--pg-white); }
+.badge-faible { background: var(--pg-danger); color: var(--pg-white); }
+.badge-attente { background: var(--pg-dark); color: var(--pg-white); }
+.badge-confirme { background: var(--pg-primary); color: var(--pg-white); }
+.badge-refuse { background: var(--pg-danger); color: var(--pg-white); }
 
 /* ===== Barre de recherche ===== */
 .search-container {
@@ -149,7 +182,7 @@ body {
 }
 
 .search-container:focus-within {
-    box-shadow: 0 0 0 3px rgba(42, 195, 42, 0.3);
+    box-shadow: 0 0 0 3px rgba(22,163,74, 0.3);
 }
 
 .search-container .form-control {
@@ -209,12 +242,12 @@ body {
 }
 
 .table-modern tbody tr:hover {
-    background: rgba(42, 195, 42, 0.05);
+    background: rgba(22,163,74, 0.05);
 }
 
 /* ===== Formulaires ===== */
 .form-modern .form-control {
-    border: 2px solid #e0e0e0;
+    border: 2px solid #D9E9DF;
     border-radius: 12px;
     padding: 12px 16px;
     transition: all 0.3s ease;
@@ -222,7 +255,7 @@ body {
 
 .form-modern .form-control:focus {
     border-color: var(--primary-green);
-    box-shadow: 0 0 0 4px rgba(42, 195, 42, 0.1);
+    box-shadow: 0 0 0 4px rgba(22,163,74, 0.1);
 }
 
 .form-modern .form-label {
@@ -319,7 +352,7 @@ body {
     right: -5px;
     width: 10px;
     height: 10px;
-    background: #e74c3c;
+    background: #DC2626;
     border-radius: 50%;
     animation: pulse 2s infinite;
 }
@@ -360,7 +393,7 @@ body {
 
 /* ===== Loader ===== */
 .loader {
-    border: 4px solid #f3f3f3;
+    border: 4px solid #F0FDF4;
     border-top: 4px solid var(--primary-green);
     border-radius: 50%;
     width: 40px;
@@ -391,3 +424,99 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--primary-orange);
 }
+/* ============================================================
+   RÉSERVATION GROUPÉE — « Tout réserver »
+   Partagé entre la recherche et la page d'une pharmacie :
+   le style doit être identique partout, d'où ce fichier commun.
+   ============================================================ */
+
+.btn-tout-reserver,
+.btn-tout-reserver-inline {
+    background: linear-gradient(135deg, #16A34A, #166534);
+    color: #fff;
+    font-weight: 700;
+    border: none;
+    border-radius: 12px;
+    text-decoration: none;
+    display: inline-block;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-tout-reserver {
+    padding: 11px 16px;
+    text-align: center;
+}
+
+.btn-tout-reserver-inline {
+    padding: 13px 30px;
+    font-size: 1rem;
+    white-space: nowrap;
+}
+
+.btn-tout-reserver:hover,
+.btn-tout-reserver-inline:hover {
+    color: #fff;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 26px rgba(22,163,74,0.3);
+}
+
+/* Encart invitant à tout réserver d'un clic */
+.carte-tout-reserver {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    flex-wrap: wrap;
+    background: linear-gradient(135deg, rgba(22,163,74,0.10), rgba(22,83,52,0.10));
+    border: 2px solid rgba(22,163,74,0.30);
+    border-radius: 18px;
+    padding: 18px 22px;
+}
+
+.carte-tout-reserver h5 {
+    color: #166534;
+    font-weight: 700;
+}
+
+.carte-tout-reserver p {
+    color: #64748B;
+    font-size: 0.92rem;
+    margin-bottom: 0;
+}
+
+/* ============================================================
+   SÉLECTION RAPIDE DES MÉDICAMENTS
+   Le patient coche lui-même avant que le site ne compte quoi que ce soit.
+   ============================================================ */
+
+.carte-selection {
+    background: #fff;
+    border: 1px solid #D9E9DF;
+    border-left: 4px solid #16A34A;
+    border-radius: 14px;
+    padding: 16px 18px;
+}
+
+.sel-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 14px;
+    border-radius: 50px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid #D9E9DF;
+    color: #64748B;
+    background: #fff;
+    transition: all 0.15s ease;
+}
+
+.sel-pill:hover { border-color: #16A34A; color: #166534; }
+
+.sel-pill-on {
+    background: #16A34A;
+    border-color: #16A34A;
+    color: #fff;
+}
+
+.sel-pill-on:hover { background: #16A34A; color: #fff; }

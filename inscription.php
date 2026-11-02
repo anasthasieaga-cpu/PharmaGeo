@@ -114,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         // Vérifier si l'email existe déjà
         try {
-            $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM utilisateur WHERE Email = :email");
+            $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM utilisateur WHERE LOWER(Email) = LOWER(:email)");
             $stmt->execute([':email' => $form_data['email']]);
             if ($stmt->fetch()['total'] > 0) {
                 $errors[] = "Cette adresse email est déjà utilisée.";
@@ -325,18 +325,18 @@ $page_title = 'Inscription - PharmaGeo';
     <style>
         /* ===== VARIABLES ===== */
         :root {
-            --primary-green: rgb(42, 195, 42);
-            --primary-orange: hsl(25, 75%, 47%);
+            --primary-green: #16A34A;
+            --primary-orange: #166534;
             --white: #ffffff;
-            --light-bg: #f0f2f5;
-            --dark-text: #1a1a2e;
-            --gray-text: #6c757d;
+            --light-bg: #F0FDF4;
+            --dark-text: #1F2937;
+            --gray-text: #64748B;
             --shadow-sm: 0 2px 20px rgba(0,0,0,0.04);
             --shadow-md: 0 8px 40px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
             --shadow-xl: 0 30px 80px rgba(0,0,0,0.16);
-            --shadow-glow-green: 0 8px 40px rgba(42, 195, 42, 0.20);
-            --shadow-glow-orange: 0 8px 40px rgba(200, 120, 30, 0.20);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74, 0.20);
+            --shadow-glow-orange: 0 8px 40px rgba(21,128,61, 0.20);
             --radius: 16px;
             --radius-lg: 24px;
             --transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -360,7 +360,7 @@ $page_title = 'Inscription - PharmaGeo';
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, rgba(42, 195, 42, 0.92), rgba(200, 120, 30, 0.88));
+            background: linear-gradient(135deg, rgba(22,163,74, 0.92), rgba(21,128,61, 0.88));
             padding: 20px;
             position: relative;
         }
@@ -425,7 +425,7 @@ $page_title = 'Inscription - PharmaGeo';
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(150deg, rgba(6,14,26,0.88) 0%, rgba(10,30,20,0.72) 45%, rgba(42,195,42,0.65) 78%, rgba(200,120,30,0.65) 100%);
+            background: linear-gradient(150deg, rgba(6,14,26,0.88) 0%, rgba(10,30,20,0.72) 45%, rgba(22,163,74,0.65) 78%, rgba(21,128,61,0.65) 100%);
             z-index: 1;
         }
 
@@ -478,20 +478,28 @@ $page_title = 'Inscription - PharmaGeo';
 
         /* ===== HEADER ===== */
         .register-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 14px;
             text-align: center;
             margin-bottom: 28px;
         }
 
         .register-header .logo {
-            display: inline-block;
+            width: 56px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
-            padding: 14px 18px;
             border-radius: 16px;
             color: white;
-            font-size: 2rem;
-            margin-bottom: 14px;
+            font-size: 1.6rem;
             box-shadow: var(--shadow-glow-green);
             transition: var(--transition);
+            flex-shrink: 0;
         }
 
         .register-header .logo:hover {
@@ -502,7 +510,7 @@ $page_title = 'Inscription - PharmaGeo';
             font-size: clamp(1.2rem, 3vw + 0.6rem, 1.8rem);
             font-weight: 800;
             color: var(--dark-text);
-            margin-bottom: 4px;
+            margin: 0;
         }
 
         .register-header h1 .highlight {
@@ -512,10 +520,10 @@ $page_title = 'Inscription - PharmaGeo';
             background-clip: text;
         }
 
-        .register-header p {
+.register-header p {
+            flex-basis: 100%;
             color: var(--gray-text);
             font-size: 0.95rem;
-            margin-bottom: 0;
         }
 
         /* ===== ALERTES ===== */
@@ -533,21 +541,21 @@ $page_title = 'Inscription - PharmaGeo';
         .alert-custom i { font-size: 1.2rem; margin-top: 2px; }
 
         .alert-custom-success {
-            background: rgba(42,195,42,0.08);
+            background: rgba(22,163,74,0.08);
             color: var(--primary-green);
             border-left: 4px solid var(--primary-green);
         }
 
         .alert-custom-danger {
-            background: rgba(231,76,60,0.08);
-            color: #e74c3c;
-            border-left: 4px solid #e74c3c;
+            background: rgba(220,38,38,0.08);
+            color: #DC2626;
+            border-left: 4px solid #DC2626;
         }
 
         .alert-custom-info {
-            background: rgba(52,152,219,0.08);
-            color: #3498db;
-            border-left: 4px solid #3498db;
+            background: rgba(22,83,52,0.08);
+            color: #166534;
+            border-left: 4px solid #166534;
         }
 
         /* ===== FORMULAIRE ===== */
@@ -561,7 +569,7 @@ $page_title = 'Inscription - PharmaGeo';
         }
 
         .form-modern .form-label .required {
-            color: #e74c3c;
+            color: #DC2626;
             margin-left: 2px;
         }
 
@@ -583,29 +591,29 @@ $page_title = 'Inscription - PharmaGeo';
         .form-modern .input-group-custom .form-control,
         .form-modern .input-group-custom .form-select {
             padding: 12px 16px 12px 44px;
-            border: 2px solid #e8ecf1;
+            border: 2px solid #D9E9DF;
             border-radius: 14px;
             font-size: 0.95rem;
             transition: var(--transition);
-            background: #f8f9fa;
+            background: #F0FDF4;
             color: var(--dark-text);
         }
 
         .form-modern .input-group-custom .form-control:focus,
         .form-modern .input-group-custom .form-select:focus {
             border-color: var(--primary-green);
-            box-shadow: 0 0 0 4px rgba(42,195,42,0.1);
+            box-shadow: 0 0 0 4px rgba(22,163,74,0.1);
             background: var(--white);
         }
 
         .form-modern .input-group-custom .form-control.is-invalid {
-            border-color: #e74c3c;
-            box-shadow: 0 0 0 4px rgba(231,76,60,0.1);
+            border-color: #DC2626;
+            box-shadow: 0 0 0 4px rgba(220,38,38,0.1);
         }
 
         .form-modern .input-group-custom .form-control.is-valid {
             border-color: var(--primary-green);
-            box-shadow: 0 0 0 4px rgba(42,195,42,0.1);
+            box-shadow: 0 0 0 4px rgba(22,163,74,0.1);
         }
 
         .form-modern .input-group-custom .toggle-password {
@@ -646,25 +654,25 @@ $page_title = 'Inscription - PharmaGeo';
             font-size: 0.75rem;
             padding: 2px 10px;
             border-radius: 50px;
-            background: #f0f0f0;
+            background: #F0FDF4;
             transition: var(--transition);
         }
 
         .form-modern .form-text .requirements .req-item.valid {
-            background: rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.1);
             color: var(--primary-green);
         }
 
         .form-modern .form-text .requirements .req-item.invalid {
-            background: rgba(231,76,60,0.1);
-            color: #e74c3c;
+            background: rgba(220,38,38,0.1);
+            color: #DC2626;
         }
 
         /* ===== PASSWORD STRENGTH ===== */
         .password-strength {
             height: 4px;
             border-radius: 4px;
-            background: #e8ecf1;
+            background: #D9E9DF;
             margin-top: 8px;
             overflow: hidden;
             transition: var(--transition);
@@ -677,9 +685,9 @@ $page_title = 'Inscription - PharmaGeo';
             transition: width 0.4s ease, background 0.4s ease;
         }
 
-        .password-strength .bar.weak { width: 25%; background: #e74c3c; }
-        .password-strength .bar.medium { width: 50%; background: #f39c12; }
-        .password-strength .bar.good { width: 75%; background: #2ecc71; }
+        .password-strength .bar.weak { width: 25%; background: #DC2626; }
+        .password-strength .bar.medium { width: 50%; background: #166534; }
+        .password-strength .bar.good { width: 75%; background: #16A34A; }
         .password-strength .bar.strong { width: 100%; background: var(--primary-green); }
 
         .password-strength-label {
@@ -709,11 +717,46 @@ $page_title = 'Inscription - PharmaGeo';
 
         .btn-primary-custom:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 40px rgba(42,195,42,0.4);
+            box-shadow: 0 12px 40px rgba(22,163,74,0.4);
             color: white;
         }
 
         .btn-primary-custom:active { transform: scale(0.98); }
+
+        /* ===== BOUTON GÉOLOCALISATION ===== */
+        .btn-locate {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            padding: 12px 20px;
+            border-radius: 12px;
+            border: 2px dashed rgba(22,163,74,0.55);
+            background: rgba(22,163,74,0.06);
+            color: var(--primary-green-dark);
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: var(--transition);
+            cursor: pointer;
+        }
+        .btn-locate:hover:not(:disabled) {
+            background: rgba(22,163,74,0.12);
+            border-color: var(--primary-green);
+            transform: translateY(-2px);
+        }
+        .btn-locate:disabled {
+            opacity: 0.7;
+            cursor: progress;
+        }
+        .locate-status {
+            font-size: 0.82rem;
+            margin-top: 6px;
+            min-height: 1.2em;
+            color: var(--gray-text);
+        }
+        .locate-status.success { color: var(--primary-green-dark); }
+        .locate-status.error { color: #DC2626; }
 
         /* ===== ROLE SELECTOR ===== */
         .role-selector {
@@ -725,7 +768,7 @@ $page_title = 'Inscription - PharmaGeo';
 
         .role-option {
             padding: 14px;
-            border: 3px solid #e8ecf1;
+            border: 3px solid #D9E9DF;
             border-radius: 14px;
             text-align: center;
             cursor: pointer;
@@ -740,8 +783,8 @@ $page_title = 'Inscription - PharmaGeo';
 
         .role-option.active {
             border-color: var(--primary-green);
-            background: rgba(42,195,42,0.04);
-            box-shadow: 0 0 0 4px rgba(42,195,42,0.1);
+            background: rgba(22,163,74,0.04);
+            box-shadow: 0 0 0 4px rgba(22,163,74,0.1);
         }
 
         .role-option .role-icon {
@@ -785,6 +828,31 @@ $page_title = 'Inscription - PharmaGeo';
         .register-footer a:hover {
             color: var(--primary-orange);
             text-decoration: underline;
+        }
+
+        .btn-home-return {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 12px 18px;
+            border: 2px solid #D9E9DF;
+            border-radius: 50px;
+            color: var(--gray-text);
+            background: #ffffff;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: var(--transition);
+        }
+
+        .btn-home-return:hover {
+            color: var(--primary-green);
+            border-color: var(--primary-green);
+            background: rgba(22,163,74,0.06);
+            text-decoration: none;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(22,163,74,0.12);
         }
 
         /* ===== FLOATING ELEMENTS ===== */
@@ -837,7 +905,7 @@ $page_title = 'Inscription - PharmaGeo';
         .pharmacie-fields {
             display: none;
             padding-top: 16px;
-            border-top: 2px dashed #e8ecf1;
+            border-top: 2px dashed #D9E9DF;
             margin-top: 16px;
         }
 
@@ -856,7 +924,7 @@ $page_title = 'Inscription - PharmaGeo';
             .register-header .logo {
                 padding: 12px 15px;
                 font-size: 1.6rem;
-            }
+             color: #fff;}
 
             .form-modern .input-group-custom .form-control,
             .form-modern .input-group-custom .form-select {
@@ -883,7 +951,7 @@ $page_title = 'Inscription - PharmaGeo';
             .register-header .logo {
                 padding: 10px 12px;
                 font-size: 1.3rem;
-            }
+             color: #fff;}
         }
 
         /* ===== SPINNER ===== */
@@ -904,7 +972,8 @@ $page_title = 'Inscription - PharmaGeo';
         .btn-primary-custom.loading .btn-text { display: none; }
         .btn-primary-custom.loading .spinner { display: inline-block; }
     </style>
-    <link rel="stylesheet" href="assets/css/responsive.css">
+    <link rel="stylesheet" href="assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -927,12 +996,12 @@ $page_title = 'Inscription - PharmaGeo';
         
         <!-- ===== HEADER ===== -->
         <div class="register-header">
-            <div class="logo animate-float">
+            <a href="<?php echo BASE_URL; ?>index.php" style="text-decoration: none; color: inherit;"><div class="logo animate-float">
                 <i class="fas fa-hospital"></i>
             </div>
             <h1>
                 <span class="highlight">PharmaGeo</span>
-            </h1>
+            </h1></a>
             <p>Créez votre compte pour accéder à tous nos services</p>
         </div>
 
@@ -1014,7 +1083,7 @@ $page_title = 'Inscription - PharmaGeo';
 
             <!-- Téléphone -->
             <div class="form-group">
-                <label for="telephone" class="form-label">Téléphone <span style="color: #6c757d; font-weight: 400;">(optionnel)</span></label>
+                <label for="telephone" class="form-label">Téléphone <span style="color: #64748B; font-weight: 400;">(optionnel)</span></label>
                 <div class="input-group-custom">
                     <span class="input-icon"><i class="fas fa-phone"></i></span>
                     <input type="tel" class="form-control" id="telephone" name="telephone" 
@@ -1134,8 +1203,15 @@ $page_title = 'Inscription - PharmaGeo';
                         </div>
                     </div>
                 </div>
+                <div class="text-center mb-2">
+                    <button type="button" class="btn-locate" id="btnLocate" onclick="locateMe()">
+                        <i class="fas fa-location-crosshairs"></i>
+                        <span>Localiser ma position automatiquement</span>
+                    </button>
+                    <div class="locate-status" id="locateStatus" aria-live="polite"></div>
+                </div>
                 <div class="form-text mb-2">
-                    <i class="fas fa-info-circle"></i> Utilisez <a href="https://www.google.com/maps" target="_blank">Google Maps</a> pour trouver les coordonnées GPS
+                    <i class="fas fa-info-circle"></i> Génère les coordonnées automatiquement avec le bouton ci-dessus, ou saisissez-les manuellement (ex. via <a href="https://www.google.com/maps" target="_blank">Google Maps</a>)
                 </div>
 
                 <div class="row g-3">
@@ -1225,13 +1301,13 @@ $page_title = 'Inscription - PharmaGeo';
                 Déjà un compte ? 
                 <a href="<?php echo BASE_URL; ?>connexion.php">Se connecter</a>
             </p>
-            <p class="mt-1" style="font-size: 0.8rem; color: #adb5bd;">
+            <p class="mt-1" style="font-size: 0.8rem; color: #64748B;">
                 <i class="fas fa-shield-alt me-1"></i>
                 Vos données sont sécurisées et chiffrées
             </p>
-            <p style="font-size: 0.75rem; color: #adb5bd;">
-                <a href="<?php echo BASE_URL; ?>index.php" style="color: #adb5bd; text-decoration: none;">
-                    <i class="fas fa-arrow-left me-1"></i> Retour à l'accueil
+            <p style="font-size: 0.75rem; color: #64748B;" class="mt-3">
+                <a href="<?php echo BASE_URL; ?>index.php" class="btn-home-return">
+                    <i class="fas fa-home me-1"></i> Retour à l'accueil
                 </a>
             </p>
         </div>
@@ -1286,6 +1362,92 @@ $page_title = 'Inscription - PharmaGeo';
             }
         }
 
+        // ===== GÉOLOCALISATION AUTOMATIQUE =====
+        const btnLocate = document.getElementById('btnLocate');
+        const latInput = document.getElementById('latitude');
+        const lngInput = document.getElementById('longitude');
+        const locateStatus = document.getElementById('locateStatus');
+
+        function setLocateStatus(message, type) {
+            if (locateStatus) {
+                locateStatus.textContent = message;
+                locateStatus.className = 'locate-status' + (type ? ' ' + type : '');
+            }
+        }
+
+        function resetLocateBtn() {
+            if (btnLocate) {
+                btnLocate.disabled = false;
+                btnLocate.querySelector('span').textContent = 'Localiser ma position automatiquement';
+            }
+        }
+
+        function setCoords(lat, lng) {
+            latInput.value = lat;
+            lngInput.value = lng;
+            latInput.classList.remove('is-invalid');
+            lngInput.classList.remove('is-invalid');
+        }
+
+        // Repli : localisation approximative via l'adresse IP (fonctionne sans
+        // autorisation GPS, par ex. en http hors localhost).
+        function locateByIP() {
+            fetch('https://ipwho.is/')
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    if (data && data.success !== false && data.latitude && data.longitude) {
+                        const lat = data.latitude.toFixed(6);
+                        const lng = data.longitude.toFixed(6);
+                        setCoords(lat, lng);
+                        setLocateStatus('Position approximative (par adresse IP) : ' + lat + ', ' + lng + '. Vous pouvez l\'ajuster manuellement.', 'success');
+                    } else {
+                        setLocateStatus('Impossible de récupérer une position automatique. Saisissez les coordonnées manuellement (Google Maps).', 'error');
+                    }
+                })
+                .catch(function () {
+                    setLocateStatus('Impossible de récupérer une position automatique. Saisissez les coordonnées manuellement (Google Maps).', 'error');
+                })
+                .finally(resetLocateBtn);
+        }
+
+        function locateMe() {
+            if (!navigator.geolocation) {
+                if (btnLocate) {
+                    btnLocate.disabled = true;
+                    btnLocate.querySelector('span').textContent = 'Localisation en cours...';
+                }
+                setLocateStatus('Géolocalisation GPS non supportée par ce navigateur. Localisation approximative par adresse IP...');
+                locateByIP();
+                return;
+            }
+
+            if (btnLocate) {
+                btnLocate.disabled = true;
+                btnLocate.querySelector('span').textContent = 'Localisation en cours...';
+            }
+            setLocateStatus('');
+
+            navigator.geolocation.getCurrentPosition(
+                function (position) {
+                    const lat = position.coords.latitude.toFixed(6);
+                    const lng = position.coords.longitude.toFixed(6);
+                    setCoords(lat, lng);
+                    setLocateStatus('Position détectée (GPS) : ' + lat + ', ' + lng + '.', 'success');
+                    resetLocateBtn();
+                },
+                function (error) {
+                    const messages = {
+                        1: 'Autorisation de géolocalisation refusée.',
+                        2: 'Position actuellement indisponible.',
+                        3: 'Délai de localisation dépassé.'
+                    };
+                    setLocateStatus((messages[error.code] || 'Erreur de localisation.') + ' Localisation approximative par adresse IP...');
+                    locateByIP();
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+            );
+        }
+
         // ===== PASSWORD STRENGTH =====
         const password = document.getElementById('password');
         const strengthBar = document.getElementById('strengthBar');
@@ -1337,19 +1499,19 @@ $page_title = 'Inscription - PharmaGeo';
                 if (score <= 1) {
                     strengthBar.className = 'bar weak';
                     strengthLabel.textContent = '⚠️ Mot de passe faible';
-                    strengthLabel.style.color = '#e74c3c';
+                    strengthLabel.style.color = '#DC2626';
                 } else if (score === 2) {
                     strengthBar.className = 'bar medium';
                     strengthLabel.textContent = '⚠️ Mot de passe moyen';
-                    strengthLabel.style.color = '#f39c12';
+                    strengthLabel.style.color = '#DC2626';
                 } else if (score === 3) {
                     strengthBar.className = 'bar good';
                     strengthLabel.textContent = '✅ Mot de passe bon';
-                    strengthLabel.style.color = '#2ecc71';
+                    strengthLabel.style.color = '#16A34A';
                 } else {
                     strengthBar.className = 'bar strong';
                     strengthLabel.textContent = '✅ Mot de passe fort';
-                    strengthLabel.style.color = '#27ae60';
+                    strengthLabel.style.color = '#16A34A';
                 }
 
                 checkPasswordMatch();
@@ -1375,8 +1537,8 @@ $page_title = 'Inscription - PharmaGeo';
                 confirmPassword.classList.remove('is-invalid');
                 confirmPassword.classList.add('is-valid');
             } else {
-                passwordMatch.innerHTML = '<i class="fas fa-exclamation-circle" style="color: #e74c3c;"></i> Les mots de passe ne correspondent pas';
-                passwordMatch.style.color = '#e74c3c';
+                passwordMatch.innerHTML = '<i class="fas fa-exclamation-circle" style="color: #DC2626;"></i> Les mots de passe ne correspondent pas';
+                passwordMatch.style.color = '#DC2626';
                 confirmPassword.classList.remove('is-valid');
                 confirmPassword.classList.add('is-invalid');
             }
@@ -1457,7 +1619,7 @@ $page_title = 'Inscription - PharmaGeo';
         });
 
         // ===== CONSOLE LOG =====
-        console.log('%c PharmaGeo - Inscription ', 'background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
+        console.log('%c PharmaGeo - Inscription ', 'background: linear-gradient(135deg, #16A34A, #166534); color: white; font-size: 16px; font-weight: bold; padding: 10px 20px; border-radius: 8px;');
         console.log('%c Créez votre compte pour accéder à tous nos services.', 'color: #666; font-size: 13px;');
     </script>
 

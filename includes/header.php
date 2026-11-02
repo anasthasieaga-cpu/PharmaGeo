@@ -68,13 +68,16 @@ if (estConnecte()) {
     <!-- Responsivité globale -->
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/responsive.css">
     
+    <!-- Palette verte PharmaGeo : harmonise les composants Bootstrap -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
+    
     <?php if (isset($extra_css)): ?>
         <?php echo $extra_css; ?>
     <?php endif; ?>
 </head>
 <body>
     <!-- ===== NAVIGATION PRINCIPALE ===== -->
-    <nav class="navbar navbar-expand-lg navbar-dark sticky-top" style="background: linear-gradient(135deg, rgb(42, 195, 42), hsl(25, 75%, 47%)); box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top" style="background: linear-gradient(135deg, #16A34A, #166534); box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
         <div class="container">
             <!-- Logo / Marque -->
             <a class="navbar-brand fw-bold" href="<?php echo BASE_URL; ?>">
@@ -131,14 +134,16 @@ if (estConnecte()) {
                 <!-- Menu utilisateur -->
                 <ul class="navbar-nav">
                     <?php if (estConnecte()): ?>
-                        <!-- Notifications -->
+                        <!-- Notifications : ouvre le menu au clic, et mène
+                             directement à la page des notifications. -->
                         <li class="nav-item dropdown">
-                            <a class="nav-link position-relative" href="#" id="notificationsDropdown" 
-                               role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <a class="nav-link position-relative" href="<?php echo BASE_URL . lienNotifications(); ?>"
+                               id="notificationsDropdown" role="button"
+                               data-navbar-dropdown aria-expanded="false" title="Mes notifications">
                                 <i class="fas fa-bell"></i>
                                 <?php if ($notifications_non_lues > 0): ?>
-                                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" 
-                                          style="font-size: 0.6rem;">
+                                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger notification-badge"
+                                          style="font-size: 0.6rem;" data-unread="<?php echo $notifications_non_lues; ?>">
                                         <?php echo $notifications_non_lues; ?>
                                     </span>
                                 <?php endif; ?>
@@ -147,56 +152,50 @@ if (estConnecte()) {
                                 <li><h6 class="dropdown-header"><i class="fas fa-bell me-2"></i>Notifications</h6></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <?php if ($notifications_non_lues > 0): ?>
-                                    <li><a class="dropdown-item text-primary" href="#">
-                                        <i class="fas fa-circle text-primary" style="font-size: 0.5rem;"></i> 
+                                    <li><a class="dropdown-item text-primary" href="<?php echo BASE_URL . lienNotifications(); ?>">
+                                        <i class="fas fa-circle text-primary" style="font-size: 0.5rem;"></i>
                                         <?php echo $notifications_non_lues; ?> notification(s) non lue(s)
                                     </a></li>
                                 <?php else: ?>
-                                    <li><a class="dropdown-item text-muted" href="#">
+                                    <li><a class="dropdown-item text-muted" href="<?php echo BASE_URL . lienNotifications(); ?>">
                                         <i class="fas fa-check-circle text-success"></i> Aucune notification
                                     </a></li>
                                 <?php endif; ?>
                                 <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item text-center text-muted small" href="#">
+                                <li><a class="dropdown-item text-center text-muted small" href="<?php echo BASE_URL . lienNotifications(); ?>">
                                     Voir toutes les notifications
                                 </a></li>
                             </ul>
                         </li>
                         
-                        <!-- Profil utilisateur -->
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" 
-                               id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fas fa-user-circle me-1" style="font-size: 1.3rem;"></i>
-                                <span class="d-none d-md-inline"><?php echo htmlspecialchars($user_fullname); ?></span>
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
-                                <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>pages/patient/dashboard.php">
-                                    <i class="fas fa-tachometer-alt me-2"></i>Tableau de bord
-                                </a></li>
-                                <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>pages/patient/profil.php">
-                                    <i class="fas fa-user-edit me-2"></i>Mon profil
-                                </a></li>
-                                <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>pages/patient/historique.php">
-                                    <i class="fas fa-history me-2"></i>Historique
-                                </a></li>
-                                <?php if (aRole('pharmacien')): ?>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>pharmacien/dashboard.php">
-                                        <i class="fas fa-store me-2"></i>Gérer ma pharmacie
-                                    </a></li>
-                                <?php endif; ?>
-                                <?php if (aRole('administrateur')): ?>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="<?php echo BASE_URL; ?>admin/dashboard.php">
-                                        <i class="fas fa-crown me-2"></i>Administration
-                                    </a></li>
-                                <?php endif; ?>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item text-danger" href="<?php echo BASE_URL; ?>deconnexion.php">
-                                    <i class="fas fa-sign-out-alt me-2"></i>Déconnexion
-                                </a></li>
-                            </ul>
+                        <!-- Profil utilisateur : vraie balise select. Le navigateur
+                             affiche la liste au clic, comme un select
+                             classique, et le choix ouvre la page.
+                             Sans JavaScript, le bouton "Valider" du
+                             <noscript> fait la même chose. -->
+                        <li class="nav-item">
+                            <form class="d-flex align-items-center" method="get"
+                                  action="<?php echo BASE_URL; ?>redirection.php">
+                                <i class="fas fa-user-circle me-1 navbar-select-icone" style="font-size: 1.3rem;"></i>
+                                <select name="vers" class="navbar-select" title="Menu du compte"
+                                        aria-label="Menu du compte"
+                                        onchange="this.form.submit()">
+                                    <option value="" selected disabled><?php echo htmlspecialchars($user_fullname); ?></option>
+                                    <option value="dashboard">Tableau de bord</option>
+                                    <option value="profil">Mon profil</option>
+                                    <option value="historique">Historique</option>
+                                    <?php if (aRole('pharmacien')): ?>
+                                        <option value="officine">Gérer ma pharmacie</option>
+                                    <?php endif; ?>
+                                    <?php if (aRole('administrateur')): ?>
+                                        <option value="administration">Administration</option>
+                                    <?php endif; ?>
+                                    <option value="deconnexion">Déconnexion</option>
+                                </select>
+                                <noscript>
+                                    <button type="submit" class="btn btn-sm btn-light ms-1">Valider</button>
+                                </noscript>
+                            </form>
                         </li>
                     <?php else: ?>
                         <!-- Utilisateur non connecté -->
@@ -217,6 +216,10 @@ if (estConnecte()) {
             </div>
         </div>
     </nav>
+
+    <!-- Menus de la barre de navigation. Bootstrap 5 les gère ; ce script
+         prend le relais si la bibliothèque JavaScript n'est pas chargée. -->
+    <script src="<?php echo BASE_URL; ?>assets/js/navbar_dropdown.js"></script>
     
     <!-- ===== CONTENU PRINCIPAL ===== -->
     <main class="py-4">

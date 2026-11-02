@@ -1,12 +1,47 @@
 <?php
 // ============================================================
-// PharmaGeo — Espace patient : Résultats de recherche
-// Affiche les pharmacies où le médicament recherché est disponible.
+// PharmaGeo — Ancienne page de résultats
+//
+// Cette page affichait un bouton « Réserver » par médicament, sans
+// possibilité de tout réserver d'un coup : c'est l'ancien format,
+// remplacé par recherche.php qui regroupe la sélection et propose
+// « Tout réserver » dès qu'une pharmacie possède tous les médicaments.
+//
+// On redirige donc ici, en conservant la recherche en cours, plutôt que
+// de maintenir deux pages de résultats qui divergent.
 // ============================================================
 
+require_once '../../includes/config.php';
+
+$redirection = BASE_URL . 'pages/patient/recherche.php';
+if (isset($_GET['q'])) {
+    $redirection .= '?q=' . urlencode((string)$_GET['q']);
+} elseif (isset($_GET['med']) && is_array($_GET['med'])) {
+    $ids = array();
+    foreach ($_GET['med'] as $m) {
+        $m = (int)$m;
+        if ($m > 0) $ids[] = $m;
+    }
+    if (!empty($ids)) {
+        $redirection .= '?med%5B%5D=' . implode('&med%5B%5D=', $ids);
+    }
+}
+
+header('Location: ' . $redirection);
+exit;
+?>
+
 $page_title = 'Résultats de recherche - PharmaGeo';
+$geo_reload = true; // recalcul des distances si la position change
 require_once '../../includes/config.php';
 require_once '../../includes/session.php';
+require_once '../../includes/geo.php';
+
+// ===== POSITION DE RÉFÉRENCE POUR LES DISTANCES =====
+$position = getPositionUtilisateur($pdo);
+// Tant que la position n'est pas un GPS exploitable, aucune distance n'est
+// calculée : on classe par nom plutôt que d'inventer un classement.
+$geo_precise = geoPositionEstPrecise($position);
 
 // ===== VARIABLES INITIALES =====
 $resultats = [];
@@ -18,15 +53,24 @@ $error = '';
 if (!empty($terme_recherche)) {
     $recherche_effectuee = true;
 
-    try {
+try {
+        // Fragment conditionnel : le classement par distance n'a de sens que
+        // si la position de référence est réellement connue.
+        $sql_distance = $geo_precise
+            ? "(6371 * acos(least(1, greatest(-1,
+                cos(radians(:lat)) * cos(radians(p.Latitude)) *
+                cos(radians(p.Longitude) - radians(:lng)) +
+                sin(radians(:lat)) * sin(radians(p.Latitude))
+                )))) as Distance"
+            : 'NULL as Distance';
+        $sql_tri = $geo_precise ? 'Distance ASC' : 'p.Nom ASC';
+
         $sql = "SELECT
                     m.Id_medicament, m.Nom_commercial, m.DCI, m.Forme, m.Dosage,
                     p.Id_pharmacie, p.Nom as Pharmacie, p.Adresse, p.Telephone, p.Quartier, p.Commune,
                     p.Latitude, p.Longitude, p.Horaire,
                     s.Quantite, s.Prix, s.Statut as Statut_stock,
-                    (6371 * acos(cos(radians(:lat)) * cos(radians(p.Latitude)) *
-                    cos(radians(p.Longitude) - radians(:lng)) +
-                    sin(radians(:lat)) * sin(radians(p.Latitude)))) as Distance
+                    $sql_distance
                 FROM medicament m
                 JOIN stock s ON m.Id_medicament = s.Id_medicament
                 JOIN pharmacie p ON s.Id_pharmacie = p.Id_pharmacie
@@ -35,17 +79,28 @@ if (!empty($terme_recherche)) {
                     OR m.Id_medicament IN (
                         SELECT Id_medicament FROM medicament_synonyme WHERE Libelle LIKE :terme
                     ))
+                AND m.Statut = 'actif'
                 AND s.Statut = 'disponible'
                 AND s.Quantite > 0
                 AND p.Statut = 'active'
-                ORDER BY Distance ASC";
+                ORDER BY $sql_tri";
 
         $stmt = $pdo->prepare($sql);
-        $term = '%' . $terme_recherche . '%';
-        $lat = $_SESSION['latitude'] ?? 6.4970;
-        $lng = $_SESSION['longitude'] ?? 2.6050;
-        $stmt->execute([':terme' => $term, ':lat' => $lat, ':lng' => $lng]);
+        $params = [':terme' => '%' . $terme_recherche . '%'];
+        if ($geo_precise) {
+            $params[':lat'] = $position['lat'];
+            $params[':lng'] = $position['lng'];
+        }
+        $stmt->execute($params);
         $resultats = $stmt->fetchAll();
+
+        // Distance en mètres, recalculée en PHP : c'est la valeur de référence
+        // (mêmes coordonnées que geoFormaterDistance()).
+        foreach ($resultats as $k => $r) {
+            $resultats[$k]['distance_metres'] = $geo_precise
+                ? geoDistanceMetres($position['lat'], $position['lng'], $r['Latitude'], $r['Longitude'])
+                : null;
+        }
     } catch(PDOException $e) {
         $error = "Erreur lors de la recherche.";
     }
@@ -60,15 +115,20 @@ if (!empty($terme_recherche)) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../../assets/css/style.css">
+    <?php require_once '../../includes/geo_style.php'; ?>    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
     <!-- ===== HEADER ===== -->
     <?php include_once '../../includes/header.php'; ?>
 
     <div class="container py-4">
+        <?php echo geoAfficherPosition($position); ?>
+        <?php echo geoBandeauPosition($position); ?>
+
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1 class="mb-0">
-                <i class="fas fa-capsules" style="color: rgb(42, 195, 42);"></i>
+                <i class="fas fa-capsules" style="color: #16A34A;"></i>
                 Résultats de recherche
             </h1>
             <a href="recherche.php" class="btn btn-outline-custom">
@@ -97,7 +157,7 @@ if (!empty($terme_recherche)) {
                                 <div class="card-body">
                                     <div class="d-flex justify-content-between align-items-start">
                                         <div>
-                                            <h5 class="fw-bold" style="color: rgb(42, 195, 42);">
+                                            <h5 class="fw-bold" style="color: #16A34A;">
                                                 <?php echo htmlspecialchars($r['Nom_commercial']); ?>
                                             </h5>
                                             <?php if ($r['DCI']): ?><span class="badge bg-secondary">DCI: <?php echo htmlspecialchars($r['DCI']); ?></span><?php endif; ?>
@@ -108,7 +168,7 @@ if (!empty($terme_recherche)) {
                                         </span>
                                     </div>
                                     <hr>
-                                    <h6 class="fw-bold" style="color: hsl(25, 75%, 47%);">
+                                    <h6 class="fw-bold" style="color: #166534;">
                                         <i class="fas fa-store me-1"></i><?php echo htmlspecialchars($r['Pharmacie']); ?>
                                     </h6>
                                     <p class="text-muted small mb-1">
@@ -116,8 +176,17 @@ if (!empty($terme_recherche)) {
                                         <?php echo htmlspecialchars($r['Quartier'] ?? ''); ?>, <?php echo htmlspecialchars($r['Commune'] ?? ''); ?>
                                     </p>
                                     <p class="text-muted small mb-1"><i class="fas fa-phone me-1"></i><?php echo htmlspecialchars($r['Telephone'] ?? 'Non disponible'); ?></p>
-                                    <p class="mb-2">
-                                        <span class="badge bg-light text-dark"><?php echo round($r['Distance'], 2); ?> km</span>
+<p class="mb-2">
+                                        <?php $distance_affichee = geoFormaterDistance($r['distance_metres'] ?? null); ?>
+                                        <?php if ($distance_affichee !== null): ?>
+                                            <span class="badge bg-light text-dark">
+                                                <i class="fas fa-route me-1"></i><?php echo $distance_affichee; ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="badge bg-light text-muted" title="Activez la localisation pour connaître la distance">
+                                                <i class="fas fa-location-arrow me-1"></i>Distance inconnue
+                                            </span>
+                                        <?php endif; ?>
                                         <?php if ($r['Prix']): ?>
                                             <span class="badge bg-warning text-dark"><?php echo number_format($r['Prix'], 0, ',', ' '); ?> FCFA</span>
                                         <?php endif; ?>
@@ -127,7 +196,7 @@ if (!empty($terme_recherche)) {
                                             <i class="fas fa-map-marker-alt me-1"></i>Carte
                                         </a>
                                         <?php $urlReservation = BASE_URL . 'pages/patient/reservation.php?stock=' . $r['Id_medicament'] . '&pharmacie=' . $r['Id_pharmacie']; ?>
-                                            <a href="<?php echo estConnecte() ? $urlReservation : BASE_URL . 'connexion.php?redirect=' . urlencode($urlReservation); ?>" class="btn btn-primary-custom btn-sm">
+                                            <a href="<?php echo $urlReservation; ?>" class="btn btn-primary-custom btn-sm">
                                                 <i class="fas fa-calendar-check me-1"></i>Réserver
                                             </a>
                                     </div>

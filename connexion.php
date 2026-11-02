@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['prenom'] = $user['Prenom'];
             $_SESSION['role'] = $user['Role'];
             $_SESSION['email'] = $user['Email'];
+            $_SESSION['photo'] = $user['Photo'] ?? null;
             
             // Journalisation
             $logStmt = $pdo->prepare("INSERT INTO log (Action, Adresse_ip, Navigateur, Resultat, Id_utilisateur) 
@@ -97,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $page_title; ?></title>
     <meta name="robots" content="noindex, nofollow">
-    <meta name="theme-color" content="#2ac32a">
+    <meta name="theme-color" content="#16A34A">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -112,16 +113,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <style>
         /* ===== VARIABLES & BASE ===== */
         :root {
-            --primary-green: #2ac32a;
-            --primary-green-dark: #1e8e1e;
-            --primary-orange: #d4880f;
-            --primary-orange-dark: #b3740d;
-            --dark-text: #0a1628;
+            --primary-green: #16A34A;
+            --primary-green-dark: #166534;
+            --primary-orange: #B91C1C;
+            --primary-orange-dark: #B91C1C;
+            --dark-text: #0F2E19;
             --gray-text: #64748b;
             --radius: 20px;
             --radius-sm: 12px;
             --shadow-lg: 0 20px 60px rgba(10,22,40,0.12);
-            --shadow-glow: 0 10px 34px rgba(42,195,42,0.28);
+            --shadow-glow: 0 10px 34px rgba(22,163,74,0.28);
             --ease: cubic-bezier(0.23,1,0.32,1);
         }
 
@@ -141,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #f4f7f6;
+            background: #F0FDF4;
             overflow-x: hidden;
         }
 
@@ -207,7 +208,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             content: '';
             position: absolute;
             inset: 0;
-            background: linear-gradient(160deg, rgba(6,14,26,0.92) 0%, rgba(10,30,20,0.80) 45%, rgba(42,195,42,0.55) 100%);
+            background: linear-gradient(160deg, rgba(6,14,26,0.92) 0%, rgba(10,30,20,0.80) 45%, rgba(22,163,74,0.55) 100%);
             z-index: -1;
         }
         .auth-visual::after {
@@ -237,12 +238,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             justify-content: center;
             font-size: 1.4rem;
             box-shadow: var(--shadow-glow);
-        }
+         color: #fff;}
         .auth-brand span {
             font-size: 1.4rem;
             font-weight: 800;
             letter-spacing: -0.5px;
+        
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: var(--primary-green);
         }
+        
 
         .auth-visual-content {
             max-width: 460px;
@@ -332,7 +340,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             align-items: center;
             justify-content: center;
             padding: 40px 24px;
-            background: #f4f7f6;
+            background: #F0FDF4;
             position: relative;
         }
         .auth-card {
@@ -366,7 +374,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-weight: 800;
             font-size: 1.2rem;
             color: var(--dark-text);
+        
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            color: var(--primary-green);
         }
+        
 
         .auth-card-header {
             text-align: center;
@@ -395,7 +410,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .alert-shake {
             animation: shake 0.5s var(--ease);
             border: none;
-            border-left: 4px solid #dc3545;
+            border-left: 4px solid #DC2626;
             border-radius: var(--radius-sm);
             font-size: 0.92rem;
         }
@@ -412,19 +427,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             transition: box-shadow 0.35s var(--ease), transform 0.35s var(--ease);
         }
         .form-modern .input-group:focus-within {
-            box-shadow: 0 0 0 4px rgba(42,195,42,0.15);
+            box-shadow: 0 0 0 4px rgba(22,163,74,0.15);
             transform: translateY(-1px);
         }
         .form-modern .input-group-text {
-            background: #f4f7f6;
-            border: 1.5px solid #e6ebe9;
+            background: #F0FDF4;
+            border: 1.5px solid #D9E9DF;
             border-right: none;
             color: var(--gray-text);
             width: 46px;
             justify-content: center;
         }
         .form-modern .form-control {
-            border: 1.5px solid #e6ebe9;
+            border: 1.5px solid #D9E9DF;
             border-left: none;
             padding: 12px 14px;
             font-size: 0.96rem;
@@ -432,7 +447,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .form-modern .toggle-password-group .form-control { border-right: none; }
         .form-modern .toggle-password {
             background: #fff;
-            border: 1.5px solid #e6ebe9;
+            border: 1.5px solid #D9E9DF;
             border-left: none;
             color: var(--gray-text);
             cursor: pointer;
@@ -465,6 +480,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         .btn-login:active:not(:disabled) { transform: translateY(0); }
         .btn-login:disabled { opacity: 0.8; cursor: progress; }
+
+        .btn-login-outline {
+            background: #fff;
+            border: 1.5px solid #D9E9DF;
+            color: var(--gray-text);
+            font-weight: 600;
+            border-radius: var(--radius-sm);
+            transition: border-color 0.3s var(--ease), color 0.3s var(--ease), background 0.3s var(--ease);
+        }
+        .btn-login-outline:hover {
+            border-color: var(--primary-green);
+            color: var(--primary-green-dark);
+            background: rgba(22,163,74,0.05);
+        }
 
         .auth-links a {
             color: var(--primary-green);
@@ -503,7 +532,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             .auth-card { padding: 32px 24px; border-radius: 16px; }
         }
     </style>
-    <link rel="stylesheet" href="assets/css/responsive.css">
+    <link rel="stylesheet" href="assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
     <div class="auth-shell">
@@ -515,10 +545,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="bg-slide"></div>
             <div class="bg-slide"></div>
 
-            <div class="auth-brand">
+            <a href="<?php echo BASE_URL; ?>index.php" class="auth-brand" style="text-decoration: none;">
                 <div class="logo-badge"><i class="fas fa-hospital"></i></div>
                 <span>PharmaGeo</span>
-            </div>
+            </a>
 
             <div class="auth-visual-content">
                 <h1>Votre santé, connectée en un instant</h1>
@@ -540,10 +570,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ============================================================ -->
         <div class="auth-form-panel">
             <div class="auth-card">
-                <div class="auth-card-mobile-brand">
+                <a href="<?php echo BASE_URL; ?>index.php" class="auth-card-mobile-brand" style="text-decoration: none;">
                     <div class="logo-badge"><i class="fas fa-hospital"></i></div>
                     <span>PharmaGeo</span>
-                </div>
+                </a>
 
                 <div class="auth-card-header">
                     <i class="fas fa-hospital d-none d-lg-inline-block"></i>
@@ -596,6 +626,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <p class="text-muted small mb-0">
                         <a href="motdepasse-oublie.php" class="forgot-link">Mot de passe oublié ?</a>
                     </p>
+                </div>
+
+                <div class="text-center mt-3">
+                    <a href="<?php echo BASE_URL; ?>index.php" class="btn btn-login-outline w-100 py-2">
+                        <i class="fas fa-home me-1"></i>Retour à l'accueil
+                    </a>
                 </div>
             </div>
         </div>

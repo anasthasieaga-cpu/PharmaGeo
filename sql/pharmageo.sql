@@ -29,6 +29,14 @@ CREATE TABLE utilisateur (
     Email          VARCHAR(150) NOT NULL,
     Mot_de_passe   VARCHAR(255) NOT NULL,
     Telephone      VARCHAR(20) DEFAULT NULL,
+    -- Dernière position connue de la personne : sert de référence au calcul
+    -- des distances lorsque le navigateur n'a pas encore fourni de GPS.
+    -- Renseignée par api/geoloc_api.php via includes/geo.php.
+    Latitude       DECIMAL(10,7) DEFAULT NULL,
+    Longitude      DECIMAL(10,7) DEFAULT NULL,
+    -- Photo de profil de l'utilisateur (chemin relatif au projet,
+    -- ex : "uploads/photos/pharmacien_3_ab12.jpg"). NULL = image par défaut.
+    Photo          VARCHAR(255) DEFAULT NULL,
     Role           ENUM('administrateur','pharmacien','patient') NOT NULL DEFAULT 'patient',
     Statut         ENUM('actif','suspendu','desactive') NOT NULL DEFAULT 'actif',
     Date_creation  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -308,6 +316,20 @@ CREATE TABLE log (
         FOREIGN KEY (Id_utilisateur)
         REFERENCES utilisateur (Id_utilisateur)
         ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ============================================================
+-- TABLE : settings
+-- Clé/valeur pour les paramètres globaux de la plateforme
+-- (ex : maintenance_mode = '1' ou '0')
+-- ============================================================
+DROP TABLE IF EXISTS settings;
+CREATE TABLE settings (
+    Cle              VARCHAR(50) NOT NULL,
+    Valeur           TEXT DEFAULT NULL,
+    Date_mise_a_jour TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                     ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (Cle)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

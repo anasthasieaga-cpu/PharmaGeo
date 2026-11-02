@@ -19,6 +19,14 @@ function estConnecte() {
     return isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
 }
 
+function lienDashboard() {
+    switch ($_SESSION['role'] ?? '') {
+        case 'administrateur': return 'admin/dashboard.php';
+        case 'pharmacien': return 'pharmacien/dashboard.php';
+        default: return 'pages/patient/dashboard.php';
+    }
+}
+
 $page_title = 'À propos - PharmaGeo';
 ?>
 <!DOCTYPE html>
@@ -38,17 +46,17 @@ $page_title = 'À propos - PharmaGeo';
     <style>
         /* ===== VARIABLES & BASE ===== */
         :root {
-            --primary-green: #2ac32a;
-            --primary-green-dark: #1e8e1e;
-            --primary-orange: #d4880f;
-            --primary-orange-dark: #b3740d;
-            --dark-text: #0a1628;
+            --primary-green: #16A34A;
+            --primary-green-dark: #166534;
+            --primary-orange: #B91C1C;
+            --primary-orange-dark: #B91C1C;
+            --dark-text: #0F2E19;
             --gray-text: #64748b;
-            --light-bg: #f0f4f8;
+            --light-bg: #F0FDF4;
             --white: #ffffff;
             --shadow-md: 0 8px 30px rgba(0,0,0,0.08);
             --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
-            --shadow-glow-green: 0 8px 40px rgba(42,195,42,0.30);
+            --shadow-glow-green: 0 8px 40px rgba(22,163,74,0.30);
             --transition: all 0.5s cubic-bezier(0.23,1,0.32,1);
             --radius: 20px;
             --radius-lg: 28px;
@@ -82,7 +90,7 @@ $page_title = 'À propos - PharmaGeo';
             font-weight: 500; color: var(--dark-text); padding: 8px 20px !important;
             border-radius: var(--radius-sm); transition: var(--transition); font-size: 0.95rem; text-decoration: none;
         }
-        .nav-link-custom:hover { color: var(--primary-green); background: rgba(42,195,42,0.08); }
+        .nav-link-custom:hover { color: var(--primary-green); background: rgba(22,163,74,0.08); }
         .btn-nav-connect {
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
             color: white !important; padding: 10px 30px !important; border-radius: 50px !important;
@@ -93,7 +101,7 @@ $page_title = 'À propos - PharmaGeo';
 
         /* HERO */
         .about-hero {
-            background: linear-gradient(135deg, rgba(6,14,26,0.92), rgba(42,195,42,0.85));
+            background: linear-gradient(135deg, rgba(6,14,26,0.92), rgba(22,163,74,0.85));
             padding: 120px 0 80px; color: white; position: relative; overflow: hidden;
         }
         .about-hero::before {
@@ -116,9 +124,9 @@ $page_title = 'À propos - PharmaGeo';
             align-items: center; justify-content: center; font-size: 2rem; margin-bottom: 18px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.06);
         }
-        .mission-icon.green { background: linear-gradient(135deg, rgba(42,195,42,0.12), rgba(42,195,42,0.04)); color: var(--primary-green); }
+        .mission-icon.green { background: linear-gradient(135deg, rgba(22,163,74,0.12), rgba(22,163,74,0.04)); color: var(--primary-green); }
         .mission-icon.orange { background: linear-gradient(135deg, rgba(212,136,15,0.12), rgba(212,136,15,0.04)); color: var(--primary-orange); }
-        .mission-icon.blue { background: linear-gradient(135deg, rgba(52,152,219,0.12), rgba(52,152,219,0.04)); color: #3498db; }
+        .mission-icon.blue { background: linear-gradient(135deg, rgba(22,83,52,0.12), rgba(22,83,52,0.04)); color: #166534; }
         .mission-card h5 { font-weight: 700; margin-bottom: 10px; }
         .mission-card p { color: var(--gray-text); font-size: 0.95rem; margin: 0; }
 
@@ -149,7 +157,7 @@ $page_title = 'À propos - PharmaGeo';
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
             display: flex; align-items: center; justify-content: center;
             color: white; font-weight: 800; font-size: 1.1rem;
-            box-shadow: 0 4px 20px rgba(42,195,42,0.25);
+            box-shadow: 0 4px 20px rgba(22,163,74,0.25);
         }
         .timeline-content h6 { font-weight: 700; margin-bottom: 4px; }
         .timeline-content p { color: var(--gray-text); font-size: 0.9rem; margin: 0; }
@@ -183,7 +191,7 @@ $page_title = 'À propos - PharmaGeo';
 
         /* FOOTER */
         .footer-custom {
-            background: #0a1628; color: rgba(255,255,255,0.70); padding: 50px 0 24px; position: relative;
+            background: #0F2E19; color: rgba(255,255,255,0.70); padding: 50px 0 24px; position: relative;
         }
         .footer-custom::before {
             content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 4px;
@@ -226,7 +234,8 @@ $page_title = 'À propos - PharmaGeo';
             .about-cta { padding: 36px 24px; }
         }
     </style>
-    <link rel="stylesheet" href="assets/css/responsive.css">
+    <link rel="stylesheet" href="assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
+    <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
 </head>
 <body>
 
@@ -238,7 +247,7 @@ $page_title = 'À propos - PharmaGeo';
                 <span class="brand-text">PharmaGeo</span>
             </a>
             <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon" style="background-image: url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cpath stroke='rgb(42,195,42)' stroke-width='2.5' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E&quot;) !important;"></span>
+                <span class="navbar-toggler-icon" style="background-image: url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cpath stroke='#16A34A' stroke-width='2.5' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E&quot;) !important;"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto align-items-lg-center gap-1">
@@ -246,7 +255,7 @@ $page_title = 'À propos - PharmaGeo';
                     <li><a class="nav-link nav-link-custom" href="<?php echo BASE_URL; ?>pages/patient/recherche.php"><i class="fas fa-search me-1"></i>Rechercher</a></li>
                     <li><a class="nav-link nav-link-custom" href="<?php echo BASE_URL; ?>pages/patient/carte.php"><i class="fas fa-map-marker-alt me-1"></i>Carte</a></li>
                     <?php if (estConnecte()): ?>
-                        <li><a class="nav-link nav-link-custom" href="<?php echo BASE_URL; ?>pages/patient/dashboard.php"><i class="fas fa-user me-1"></i>Dashboard</a></li>
+                        <li><a class="nav-link nav-link-custom" href="<?php echo BASE_URL . lienDashboard(); ?>"><i class="fas fa-user me-1"></i>Dashboard</a></li>
                         <li><a class="nav-link btn-nav-connect" href="<?php echo BASE_URL; ?>deconnexion.php"><i class="fas fa-sign-out-alt me-1"></i>Déconnexion</a></li>
                     <?php else: ?>
                         <li><a class="nav-link btn-nav-connect" href="<?php echo BASE_URL; ?>connexion.php"><i class="fas fa-sign-in-alt me-1"></i>Connexion</a></li>
@@ -313,7 +322,7 @@ $page_title = 'À propos - PharmaGeo';
             </div>
             <div class="row g-4 align-items-center">
                 <div class="col-lg-6" data-aos="fade-right">
-                    <div class="p-4 rounded-4" style="background: linear-gradient(135deg, rgba(42,195,42,0.06), rgba(212,136,15,0.04));">
+                    <div class="p-4 rounded-4" style="background: linear-gradient(135deg, rgba(22,163,74,0.06), rgba(212,136,15,0.04));">
                         <h4 class="fw-bold mb-3">Le défi au quotidien</h4>
                         <p style="color: var(--gray-text);">À Porto-Novo, comme dans de nombreuses villes d'Afrique, trouver un médicament spécifique peut être un véritable parcours du combattant :</p>
                         <ul style="color: var(--gray-text); padding-left: 20px;">
@@ -325,7 +334,7 @@ $page_title = 'À propos - PharmaGeo';
                     </div>
                 </div>
                 <div class="col-lg-6" data-aos="fade-left">
-                    <div class="p-4 rounded-4" style="background: linear-gradient(135deg, rgba(42,195,42,0.08), rgba(42,195,42,0.02));">
+                    <div class="p-4 rounded-4" style="background: linear-gradient(135deg, rgba(22,163,74,0.08), rgba(22,163,74,0.02));">
                         <h4 class="fw-bold mb-3" style="color: var(--primary-green);">Notre solution</h4>
                         <p style="color: var(--gray-text);">PharmaGeo résout ces problèmes avec une plateforme simple et efficace :</p>
                         <ul style="color: var(--gray-text); padding-left: 20px;">
@@ -345,7 +354,7 @@ $page_title = 'À propos - PharmaGeo';
         <div class="container">
             <div class="row align-items-center g-5">
                 <div class="col-lg-6" data-aos="fade-right">
-                    <span class="badge mb-3" style="background: rgba(42,195,42,0.10); color: var(--primary-green); padding: 8px 20px; border-radius: 50px; font-size: 0.85rem;">
+                    <span class="badge mb-3" style="background: rgba(22,163,74,0.10); color: var(--primary-green); padding: 8px 20px; border-radius: 50px; font-size: 0.85rem;">
                         <i class="fas fa-road me-1"></i> Notre parcours
                     </span>
                     <h2 class="fw-bold mb-4" style="letter-spacing: -1px;">L'histoire de <span style="background: linear-gradient(135deg, var(--primary-green), var(--primary-orange)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">PharmaGeo</span></h2>
@@ -415,7 +424,7 @@ $page_title = 'À propos - PharmaGeo';
             <div class="row g-4">
                 <div class="col-md-3 col-6" data-aos="fade-up" data-aos-delay="0">
                     <div class="text-center p-4">
-                        <div style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,rgba(42,195,42,0.10),rgba(42,195,42,0.04));display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:1.6rem;color:var(--primary-green);">
+                        <div style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,rgba(22,163,74,0.10),rgba(22,163,74,0.04));display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:1.6rem;color:var(--primary-green);">
                             <i class="fas fa-map-marked-alt"></i>
                         </div>
                         <h6 class="fw-bold">Géolocalisation</h6>
@@ -433,7 +442,7 @@ $page_title = 'À propos - PharmaGeo';
                 </div>
                 <div class="col-md-3 col-6" data-aos="fade-up" data-aos-delay="200">
                     <div class="text-center p-4">
-                        <div style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,rgba(52,152,219,0.10),rgba(52,152,219,0.04));display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:1.6rem;color:#3498db;">
+                        <div style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,rgba(22,83,52,0.10),rgba(22,83,52,0.04));display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:1.6rem;color:#166534;">
                             <i class="fas fa-shield-alt"></i>
                         </div>
                         <h6 class="fw-bold">Sécurité</h6>
@@ -442,7 +451,7 @@ $page_title = 'À propos - PharmaGeo';
                 </div>
                 <div class="col-md-3 col-6" data-aos="fade-up" data-aos-delay="300">
                     <div class="text-center p-4">
-                        <div style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,rgba(155,89,182,0.10),rgba(155,89,182,0.04));display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:1.6rem;color:#9b59b6;">
+                        <div style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,rgba(155,89,182,0.10),rgba(155,89,182,0.04));display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:1.6rem;color:#1F2937;">
                             <i class="fas fa-mobile-alt"></i>
                         </div>
                         <h6 class="fw-bold">Responsive</h6>
@@ -476,10 +485,10 @@ $page_title = 'À propos - PharmaGeo';
         <div class="container">
             <div class="row g-4">
                 <div class="col-lg-4">
-                    <div class="footer-brand">
+                    <a href="<?php echo BASE_URL; ?>index.php" class="footer-brand" style="text-decoration: none;">
                         <span class="brand-icon"><i class="fas fa-hospital"></i></span>
                         PharmaGeo
-                    </div>
+                    </a>
                     <p class="mt-3" style="max-width: 320px; font-size: 0.95rem;">Plateforme intelligente de géolocalisation des pharmacies à Porto-Novo.</p>
                 </div>
                 <div class="col-lg-2 col-md-4">

@@ -1,0 +1,481 @@
+/* ============================================================
+   PharmaGeo — Palette et harmonisation Bootstrap
+   ------------------------------------------------------------
+   Feuille de style legere, chargee par toutes les pages apres
+   Bootstrap. Elle ne fait qu'appliquer l'identite verte et
+   blanche aux composants Bootstrap qui utilisent encore leurs
+   couleurs par defaut (boutons, champs, liens, badges).
+   Aucune modification de structure ni de comportement.
+   ============================================================ */
+
+:root {
+    /* Vert medical moderne */
+    --pg-primary: #16A34A;
+    /* Vert fonce */
+    --pg-dark: #166534;
+    /* Blanc */
+    --pg-white: #FFFFFF;
+    /* Vert tres clair */
+    --pg-bg-soft: #F0FDF4;
+    /* Gris tres fonce */
+    --pg-text: #1F2937;
+    /* Gris */
+    --pg-text-soft: #64748B;
+    /* Rouge : erreurs, alertes et medicaments indisponibles */
+    --pg-danger: #DC2626;
+
+    /* Nuances derivees */
+    --pg-primary-soft: #DCFCE7;
+    --pg-border: #D9E9DF;
+    --pg-dark-hover: #14532D;
+}
+
+/* ------------------------------------------------------------
+   LIENS : le bleu par defaut devient le vert fonce
+   ------------------------------------------------------------ */
+a {
+    color: var(--pg-dark);
+}
+
+a:hover,
+a:focus {
+    color: var(--pg-primary);
+}
+
+/* ------------------------------------------------------------
+   BOUTONS PRINCIPAUX : bleu Bootstrap -> vert medical
+   ------------------------------------------------------------ */
+.btn-primary {
+    --bs-btn-color: #fff;
+    --bs-btn-bg: var(--pg-primary);
+    --bs-btn-border-color: var(--pg-primary);
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: var(--pg-dark);
+    --bs-btn-hover-border-color: var(--pg-dark);
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: var(--pg-dark-hover);
+    --bs-btn-active-border-color: var(--pg-dark-hover);
+    --bs-btn-disabled-color: #fff;
+    --bs-btn-disabled-bg: #7FCF9B;
+    --bs-btn-disabled-border-color: #7FCF9B;
+    --bs-btn-focus-shadow-rgb: 22, 163, 74;
+}
+
+/* Variante contournee, meme identite */
+.btn-outline-primary {
+    --bs-btn-color: var(--pg-primary);
+    --bs-btn-border-color: var(--pg-primary);
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: var(--pg-primary);
+    --bs-btn-hover-border-color: var(--pg-primary);
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: var(--pg-dark);
+    --bs-btn-active-border-color: var(--pg-dark);
+    --bs-btn-disabled-color: #7FCF9B;
+    --bs-btn-disabled-border-color: #7FCF9B;
+    --bs-btn-focus-shadow-rgb: 22, 163, 74;
+}
+
+/* Reussite : meme vert que le bouton principal */
+.btn-success {
+    --bs-btn-bg: var(--pg-primary);
+    --bs-btn-border-color: var(--pg-primary);
+    --bs-btn-hover-bg: var(--pg-dark);
+    --bs-btn-hover-border-color: var(--pg-dark);
+    --bs-btn-active-bg: var(--pg-dark-hover);
+    --bs-btn-active-border-color: var(--pg-dark-hover);
+}
+
+/* Erreur : rouge reserve aux erreurs et alertes */
+.btn-danger {
+    --bs-btn-bg: var(--pg-danger);
+    --bs-btn-border-color: var(--pg-danger);
+    --bs-btn-hover-bg: #B91C1C;
+    --bs-btn-hover-border-color: #B91C1C;
+    --bs-btn-active-bg: #B91C1C;
+    --bs-btn-active-border-color: #B91C1C;
+}
+
+/* Secondaire : vert tres clair, lisible sans contraste faible */
+.btn-secondary {
+    --bs-btn-bg: var(--pg-bg-soft);
+    --bs-btn-border-color: var(--pg-border);
+    --bs-btn-color: var(--pg-dark);
+    --bs-btn-hover-bg: var(--pg-primary-soft);
+    --bs-btn-hover-border-color: var(--pg-primary);
+    --bs-btn-hover-color: var(--pg-dark);
+    --bs-btn-active-bg: var(--pg-primary-soft);
+    --bs-btn-active-border-color: var(--pg-primary);
+    --bs-btn-active-color: var(--pg-dark);
+}
+
+/* Contour gris : aligne sur la palette */
+.btn-outline-secondary {
+    --bs-btn-color: var(--pg-text-soft);
+    --bs-btn-border-color: var(--pg-border);
+    --bs-btn-hover-color: var(--pg-dark);
+    --bs-btn-hover-bg: var(--pg-bg-soft);
+    --bs-btn-hover-border-color: var(--pg-primary);
+    --bs-btn-active-color: var(--pg-dark);
+    --bs-btn-active-bg: var(--pg-primary-soft);
+    --bs-btn-active-border-color: var(--pg-primary);
+}
+
+/* ------------------------------------------------------------
+   FORMULAIRES : contours et anneaux de focus au vert
+   ------------------------------------------------------------ */
+.form-control,
+.form-select {
+    border-color: var(--pg-border);
+    color: var(--pg-text);
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--pg-primary);
+    background-color: var(--pg-white);
+    color: var(--pg-text);
+    box-shadow: 0 0 0 0.25rem rgba(22, 163, 74, 0.18);
+}
+
+.form-control::placeholder {
+    color: var(--pg-text-soft);
+    opacity: 1;
+}
+
+.form-control:disabled,
+.form-select:disabled {
+    background-color: var(--pg-bg-soft);
+    color: var(--pg-text-soft);
+}
+
+/* Cases a cocher et boutons radio */
+.form-check-input {
+    border-color: var(--pg-border);
+}
+
+.form-check-input:checked {
+    background-color: var(--pg-primary);
+    border-color: var(--pg-primary);
+}
+
+.form-check-input:focus {
+    border-color: var(--pg-primary);
+    box-shadow: 0 0 0 0.25rem rgba(22, 163, 74, 0.18);
+}
+
+/* Champs non valides : rouge */
+.form-control.is-invalid,
+.form-select.is-invalid,
+.was-validated .form-control:invalid,
+.was-validated .form-select:invalid {
+    border-color: var(--pg-danger);
+}
+
+.form-control.is-invalid:focus,
+.form-select.is-invalid:focus,
+.was-validated .form-control:invalid:focus,
+.was-validated .form-select:invalid:focus {
+    box-shadow: 0 0 0 0.25rem rgba(220, 38, 38, 0.18);
+}
+
+/* Champs valides : vert */
+.form-control.is-valid,
+.was-validated .form-control:valid {
+    border-color: var(--pg-primary);
+}
+
+/* ------------------------------------------------------------
+   ALERTES : succes en vert, erreur en rouge
+   ------------------------------------------------------------ */
+.alert-success {
+    --bs-alert-bg: var(--pg-primary-soft);
+    --bs-alert-color: var(--pg-dark);
+    --bs-alert-border-color: var(--pg-primary);
+}
+
+.alert-danger {
+    --bs-alert-bg: #FEF2F2;
+    --bs-alert-color: var(--pg-danger);
+    --bs-alert-border-color: var(--pg-danger);
+}
+
+.alert-warning {
+    --bs-alert-bg: var(--pg-bg-soft);
+    --bs-alert-color: var(--pg-text);
+    --bs-alert-border-color: var(--pg-primary);
+}
+
+/* ------------------------------------------------------------
+   BADGES ET ETIQUETTES
+   ------------------------------------------------------------ */
+.badge.text-bg-primary,
+.text-bg-primary {
+    background-color: var(--pg-primary) !important;
+    color: #fff !important;
+}
+
+.badge.text-bg-success,
+.text-bg-success {
+    background-color: var(--pg-primary) !important;
+    color: #fff !important;
+}
+
+.badge.text-bg-danger,
+.text-bg-danger {
+    background-color: var(--pg-danger) !important;
+    color: #fff !important;
+}
+
+.badge.text-bg-secondary,
+.text-bg-secondary {
+    background-color: var(--pg-text-soft) !important;
+    color: #fff !important;
+}
+
+.bg-primary {
+    background-color: var(--pg-primary) !important;
+}
+
+.text-primary {
+    color: var(--pg-primary) !important;
+}
+
+.border-primary {
+    border-color: var(--pg-primary) !important;
+}
+
+/* ------------------------------------------------------------
+   TABLEAUX
+   ------------------------------------------------------------ */
+.table {
+    --bs-table-color: var(--pg-text);
+    --bs-table-bg: transparent;
+    --bs-table-border-color: var(--pg-border);
+    --bs-table-striped-color: var(--pg-text);
+    --bs-table-striped-bg: var(--pg-bg-soft);
+    --bs-table-hover-color: var(--pg-text);
+    --bs-table-hover-bg: var(--pg-primary-soft);
+}
+
+.table thead th {
+    color: var(--pg-text);
+    font-weight: 600;
+    border-bottom-width: 2px;
+    border-bottom-color: var(--pg-primary);
+}
+
+.table > :not(caption) > * > * {
+    border-bottom-color: var(--pg-border);
+}
+
+/* ------------------------------------------------------------
+   BARRE DE NAVIGATION
+   ------------------------------------------------------------ */
+.navbar-dark .navbar-brand,
+.navbar-dark .navbar-nav .nav-link {
+    color: rgba(255, 255, 255, 0.92);
+}
+
+.navbar-dark .navbar-nav .nav-link:hover,
+.navbar-dark .navbar-nav .nav-link:focus,
+.navbar-dark .navbar-nav .nav-link.active {
+    color: #fff;
+}
+
+.navbar-dark .navbar-nav .nav-link.active {
+    font-weight: 600;
+}
+
+/* ------------------------------------------------------------
+   TEXTES ET FONDS GENERAUX
+   ------------------------------------------------------------ */
+body {
+    color: var(--pg-text);
+}
+
+.text-muted {
+    color: var(--pg-text-soft) !important;
+}
+
+.hr-text,
+.form-text {
+    color: var(--pg-text-soft);
+}
+
+/* Petits ecrans : le menu deroule reste lisible sur fond blanc */
+.navbar-dark .navbar-collapse {
+    background-color: var(--pg-dark);
+}
+
+/* ------------------------------------------------------------
+   AVATAR PHARMACIEN (photo de profil dans le menu lateral)
+   ------------------------------------------------------------ */
+.sidebar-admin .user-profile .avatar {
+    overflow: hidden;
+}
+
+.sidebar-admin .user-profile .avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* ============================================================
+   PAGINATION PROFESSIONNELLE (helper includes/pagination.php)
+   Utilisee par toutes les listes paginees de la plateforme :
+   .pagination-wrapper > .pagination-info + .pagination-custom
+   ============================================================ */
+.pagination-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 18px 0 6px;
+    padding: 12px 16px;
+    background-color: var(--pg-white);
+    border: 1px solid var(--pg-border);
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(31, 41, 55, 0.05);
+}
+
+.pagination-info {
+    color: var(--pg-text-soft);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.pagination-info i {
+    color: var(--pg-primary);
+    margin-right: 4px;
+}
+
+.pagination-info strong {
+    color: var(--pg-text);
+    font-weight: 700;
+}
+
+.pagination-custom {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.page-link-custom {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 38px;
+    height: 38px;
+    padding: 0 12px;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    background-color: var(--pg-white);
+    color: #3D4A5C;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+    transition: background-color 0.15s ease, border-color 0.15s ease,
+                color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.page-link-custom:hover,
+.page-link-custom:focus {
+    background-color: var(--pg-bg-soft);
+    border-color: var(--pg-primary);
+    color: var(--pg-dark);
+    transform: translateY(-1px);
+}
+
+.page-link-custom.active {
+    background-color: var(--pg-primary);
+    border-color: var(--pg-primary);
+    color: #fff;
+    box-shadow: 0 4px 10px rgba(22, 163, 74, 0.28);
+}
+
+.page-link-custom.disabled {
+    background-color: #F8FAFC;
+    border-color: #E2E8F0;
+    color: #94A3B8;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.page-link-custom.disabled:hover {
+    transform: none;
+    border-color: #E2E8F0;
+    background-color: #F8FAFC;
+    color: #94A3B8;
+}
+
+.page-link-custom.ellipsis {
+    min-width: 24px;
+    padding: 0 4px;
+    border-color: transparent;
+    background-color: transparent;
+    color: var(--pg-text-soft);
+    cursor: default;
+}
+
+.page-link-custom.ellipsis:hover {
+    transform: none;
+    background-color: transparent;
+    border-color: transparent;
+}
+
+/* Tablette */
+@media (max-width: 992px) {
+    .pagination-wrapper {
+        justify-content: center;
+        text-align: center;
+    }
+}
+
+/* Telephone : Pagination compacte, on garde les fleches + la page active */
+@media (max-width: 576px) {
+    .pagination-wrapper {
+        padding: 12px 10px;
+        gap: 10px;
+    }
+
+    .pagination-info {
+        width: 100%;
+        font-size: 0.8125rem;
+    }
+
+    .pagination-custom {
+        width: 100%;
+        justify-content: center;
+        gap: 4px;
+    }
+
+    .page-link-custom {
+        min-width: 34px;
+        height: 34px;
+        padding: 0 9px;
+        font-size: 0.8125rem;
+        border-radius: 8px;
+    }
+
+    .page-link-custom.ellipsis {
+        display: none;
+    }
+
+    /* On masque le libelle long : les fleches suffisent sur petit ecran */
+    .page-link-texte {
+        display: none;
+    }
+
+    .page-link-custom.active {
+        min-width: 40px;
+    }
+}
