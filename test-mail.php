@@ -94,6 +94,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$blocked) {
         .mono { font-family: Consolas, monospace; font-size: 0.82rem; background: #F0FDF4; border: 1.5px solid #FEF2F2; border-left: 4px solid var(--primary-orange); border-radius: 10px; padding: 10px 12px; word-break: break-word; }
     </style>    <!-- Palette verte PharmaGeo -->
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
+    <!-- Favicon & identité visuelle PharmaGéo -->
+    <link rel="icon" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="<?php echo BASE_URL; ?>assets/identite/favicons/apple-touch-icon.png">
+    <link rel="manifest" href="<?php echo BASE_URL; ?>assets/identite/favicons/site.webmanifest">
+    <meta property="og:image" content="<?php echo BASE_URL; ?>assets/identite/reseaux-sociaux/og-image-1200x630.png">
 </head>
 <body>
     <div class="card-shell">

@@ -395,6 +395,14 @@ function pgd_debut(array $o = [])
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>' . pgd_e($titre) . ' | PharmaGeo</title>
+<meta name="theme-color" content="#16A34A">
+<meta property="og:image" content="' . pgd_e($base) . 'assets/identite/reseaux-sociaux/og-image-1200x630.png">
+<link rel="icon" href="' . pgd_e($base) . 'assets/identite/favicons/favicon.ico" sizes="any">
+<link rel="icon" type="image/svg+xml" href="' . pgd_e($base) . 'assets/identite/favicons/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="' . pgd_e($base) . 'assets/identite/favicons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="' . pgd_e($base) . 'assets/identite/favicons/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="' . pgd_e($base) . 'assets/identite/favicons/apple-touch-icon.png">
+<link rel="manifest" href="' . pgd_e($base) . 'assets/identite/favicons/site.webmanifest">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -450,7 +458,7 @@ function pgd_sidebar(array $o = [])
 
     echo '<aside class="pgd-sidebar" id="sidebar" aria-label="Navigation principale">';
     echo '<a href="' . pgd_e(pgd_url(pgd_role() === 'patient' ? 'pages/patient/dashboard.php' : ($role === 'administrateur' ? 'admin/dashboard.php' : 'pharmacien/dashboard.php'))) . '" class="pgd-brand">';
-    echo '<span class="pgd-brand__icon"><i class="fas fa-location-crosshairs"></i></span>';
+    echo '<span class="pgd-brand__icon"><img class="pg-brand-logo" src="' . pgd_e(pgd_url('assets/identite/icones/pharmageo-icone-blanc.svg')) . '" alt=""></span>';
     echo '<span class="pgd-brand__text"><h4>PharmaGeo</h4><small>' . pgd_e(pgd_libelle_role($role)) . '</small></span>';
     echo '</a>';
 

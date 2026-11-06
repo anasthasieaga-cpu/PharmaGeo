@@ -985,6 +985,14 @@ $page_title = 'Inscription - PharmaGeo';
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <style>.coord-map{height:320px;border-radius:12px;border:1px solid #d1d5db;margin-bottom:.5rem;z-index:0}</style>
+    <!-- Favicon & identité visuelle PharmaGéo -->
+    <link rel="icon" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="<?php echo BASE_URL; ?>assets/identite/favicons/apple-touch-icon.png">
+    <link rel="manifest" href="<?php echo BASE_URL; ?>assets/identite/favicons/site.webmanifest">
+    <meta property="og:image" content="<?php echo BASE_URL; ?>assets/identite/reseaux-sociaux/og-image-1200x630.png">
 </head>
 <body>
 
@@ -1008,7 +1016,7 @@ $page_title = 'Inscription - PharmaGeo';
         <!-- ===== HEADER ===== -->
         <div class="register-header">
             <a href="<?php echo BASE_URL; ?>index.php" style="text-decoration: none; color: inherit;"><div class="logo animate-float">
-                <i class="fas fa-hospital"></i>
+                <img class="pg-brand-logo pg-brand-logo--xl" src="<?php echo BASE_URL; ?>assets/identite/icones/pharmageo-icone-blanc.svg" alt="">
             </div>
             <h1>
                 <span class="highlight">PharmaGeo</span>

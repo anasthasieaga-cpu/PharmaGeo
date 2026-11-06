@@ -387,12 +387,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             text-align: center;
             margin-bottom: 30px;
         }
-        .auth-card-header i.fa-hospital {
-            font-size: 2.6rem;
-            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        .auth-card-header .pg-brand-logo {
+            width: 2.6rem;
+            height: 2.6rem;
         }
         .auth-card-header h2 {
             margin-top: 10px;
@@ -534,6 +531,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </style>
     <link rel="stylesheet" href="assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
+    <!-- Favicon & identité visuelle PharmaGéo -->
+    <link rel="icon" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="<?php echo BASE_URL; ?>assets/identite/favicons/apple-touch-icon.png">
+    <link rel="manifest" href="<?php echo BASE_URL; ?>assets/identite/favicons/site.webmanifest">
+    <meta property="og:image" content="<?php echo BASE_URL; ?>assets/identite/reseaux-sociaux/og-image-1200x630.png">
 </head>
 <body>
     <div class="auth-shell">
@@ -546,8 +551,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="bg-slide"></div>
 
             <a href="<?php echo BASE_URL; ?>index.php" class="auth-brand" style="text-decoration: none;">
-                <div class="logo-badge"><i class="fas fa-hospital"></i></div>
-                <span>PharmaGeo</span>
+                <img class="pg-auth-wordmark" src="<?php echo BASE_URL; ?>assets/identite/logos/svg/pharmageo-logo-horizontal-blanc.svg" alt="PharmaGeo">
             </a>
 
             <div class="auth-visual-content">
@@ -571,12 +575,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="auth-form-panel">
             <div class="auth-card">
                 <a href="<?php echo BASE_URL; ?>index.php" class="auth-card-mobile-brand" style="text-decoration: none;">
-                    <div class="logo-badge"><i class="fas fa-hospital"></i></div>
-                    <span>PharmaGeo</span>
+                    <img class="pg-auth-wordmark" src="<?php echo BASE_URL; ?>assets/identite/logos/svg/pharmageo-logo-horizontal-blanc.svg" alt="PharmaGeo">
                 </a>
 
                 <div class="auth-card-header">
-                    <i class="fas fa-hospital d-none d-lg-inline-block"></i>
+                    <img class="pg-brand-logo pg-brand-logo--lg d-none d-lg-inline-block" src="<?php echo BASE_URL; ?>assets/identite/icones/pharmageo-icone-couleur.svg" alt="">
                     <h2>Connexion</h2>
                     <p>Connectez-vous à votre compte</p>
                 </div>

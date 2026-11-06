@@ -181,6 +181,14 @@ $page_title = 'Conditions d\'utilisation - PharmaGeo';
     </style>
     <link rel="stylesheet" href="assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
+    <!-- Favicon & identité visuelle PharmaGéo -->
+    <link rel="icon" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="<?php echo BASE_URL; ?>assets/identite/favicons/apple-touch-icon.png">
+    <link rel="manifest" href="<?php echo BASE_URL; ?>assets/identite/favicons/site.webmanifest">
+    <meta property="og:image" content="<?php echo BASE_URL; ?>assets/identite/reseaux-sociaux/og-image-1200x630.png">
 </head>
 <body>
 
@@ -188,8 +196,7 @@ $page_title = 'Conditions d\'utilisation - PharmaGeo';
     <nav class="navbar navbar-expand-lg navbar-custom sticky-top">
         <div class="container">
             <a class="navbar-brand-custom" href="<?php echo BASE_URL; ?>">
-                <span class="brand-icon"><i class="fas fa-hospital"></i></span>
-                <span class="brand-text">PharmaGeo</span>
+                <img class="pg-brand-wordmark" src="<?php echo BASE_URL; ?>assets/identite/logos/svg/pharmageo-logo-horizontal-blanc.svg" alt="PharmaGeo">
             </a>
             <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon" style="background-image: url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cpath stroke='#16A34A' stroke-width='2.5' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3E%3C/svg%3E&quot;) !important;"></span>
@@ -322,10 +329,7 @@ $page_title = 'Conditions d\'utilisation - PharmaGeo';
         <div class="container">
             <div class="row g-4">
                 <div class="col-lg-4">
-                    <a href="<?php echo BASE_URL; ?>index.php" class="footer-brand" style="text-decoration: none;">
-                        <span class="brand-icon"><i class="fas fa-hospital"></i></span>
-                        PharmaGeo
-                    </a>
+                    <a href="<?php echo BASE_URL; ?>index.php" class="footer-brand" style="text-decoration: none;"><img class="pg-footer-logo" src="<?php echo BASE_URL; ?>assets/identite/logos/svg/pharmageo-logo-horizontal-blanc.svg" alt="PharmaGeo"></a>
                     <p class="mt-3" style="max-width: 320px; font-size: 0.95rem;">Plateforme intelligente de géolocalisation des pharmacies à Porto-Novo.</p>
                 </div>
                 <div class="col-lg-2 col-md-4">

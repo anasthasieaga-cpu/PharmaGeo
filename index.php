@@ -106,7 +106,6 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
     <meta name="robots" content="index, follow">
     <meta name="theme-color" content="#16A34A">
     <link rel="canonical" href="<?php echo BASE_URL; ?>">
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%232ac32a'/%3E%3Ctext x='50' y='68' text-anchor='middle' font-size='58' font-family='Arial' fill='white'%3E%2B%3C/text%3E%3C/svg%3E">
 
     <!-- Open Graph -->
     <meta property="og:type" content="website">
@@ -367,6 +366,14 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
             display: flex;
             align-items: center;
             gap: 10px;
+        }
+        .navbar-brand-custom .pg-brand-wordmark {
+            display: block;
+            width: 188px;
+            height: 64px;
+            flex: 0 0 188px;
+            object-fit: contain;
+            object-position: left center;
         }
         .navbar-brand-custom .brand-icon {
             background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
@@ -1524,6 +1531,14 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
     </style>
     <link rel="stylesheet" href="assets/css/responsive.css">    <!-- Palette verte PharmaGeo -->
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
+    <!-- Favicon & identité visuelle PharmaGéo -->
+    <link rel="icon" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="<?php echo BASE_URL; ?>assets/identite/favicons/apple-touch-icon.png">
+    <link rel="manifest" href="<?php echo BASE_URL; ?>assets/identite/favicons/site.webmanifest">
+    <meta property="og:image" content="<?php echo BASE_URL; ?>assets/identite/reseaux-sociaux/og-image-1200x630.png">
 </head>
 <body>
 
@@ -1536,8 +1551,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
     <nav class="navbar navbar-expand-lg navbar-custom sticky-top" id="mainNav" aria-label="Navigation principale">
         <div class="container">
             <a class="navbar-brand navbar-brand-custom" href="<?php echo BASE_URL; ?>">
-                <span class="brand-icon"><i class="fas fa-hospital"></i></span>
-                <span class="brand-text">PharmaGeo</span>
+                <img class="pg-brand-wordmark" src="<?php echo BASE_URL; ?>assets/identite/logos/svg/pharmageo-logo-horizontal.svg" alt="PharmaGeo" onerror="this.onerror=null;this.src='<?php echo BASE_URL; ?>assets/identite/icones/pharmageo-icone-vert.svg';this.style.width='48px';this.style.flexBasis='48px';">
             </a>
             <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Ouvrir le menu de navigation">
                 <span class="navbar-toggler-icon"></span>
@@ -1944,10 +1958,7 @@ $page_description = 'Trouvez rapidement vos médicaments dans les pharmacies de 
         <div class="container">
             <div class="row g-4">
                 <div class="col-lg-4">
-                    <a href="<?php echo BASE_URL; ?>index.php" class="footer-brand" style="text-decoration: none;">
-                        <span class="brand-icon"><i class="fas fa-hospital"></i></span>
-                        PharmaGeo
-                    </a>
+                    <a href="<?php echo BASE_URL; ?>index.php" class="footer-brand" style="text-decoration: none;"><img class="pg-footer-logo" src="<?php echo BASE_URL; ?>assets/identite/logos/svg/pharmageo-logo-horizontal-blanc.svg" alt="PharmaGeo"></a>
                     <p class="footer-description mt-3">
                         Plateforme intelligente de géolocalisation des pharmacies et de recherche de disponibilité des médicaments à Porto-Novo.
                     </p>

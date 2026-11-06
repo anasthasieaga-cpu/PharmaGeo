@@ -203,6 +203,9 @@ function maintenance_afficher_page() {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maintenance - PharmaGeo</title>
+    <link rel="icon" href="<?php echo htmlspecialchars(maintenance_base_url(), ENT_QUOTES, 'UTF-8'); ?>assets/identite/favicons/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="<?php echo htmlspecialchars(maintenance_base_url(), ENT_QUOTES, 'UTF-8'); ?>assets/identite/favicons/favicon.svg">
+    <link rel="apple-touch-icon" href="<?php echo htmlspecialchars(maintenance_base_url(), ENT_QUOTES, 'UTF-8'); ?>assets/identite/favicons/apple-touch-icon.png">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(maintenance_base_url(), ENT_QUOTES, 'UTF-8'); ?>assets/css/palette.css">

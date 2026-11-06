@@ -7,11 +7,11 @@
          liens utiles et chargement des scripts globaux.
          ============================================================ -->
     <!-- ===== FOOTER ===== -->
-    <footer class="text-white py-4 mt-5" style="background: linear-gradient(135deg, #16A34A, #166534);">
+    <footer class="text-white py-4 mt-5" style="background: linear-gradient(135deg, var(--primary-green), var(--night-green));">
         <div class="container">
             <div class="row">
                 <div class="col-md-4 mb-3">
-                    <h5><a href="<?php echo BASE_URL; ?>index.php" style="color: inherit; text-decoration: none;"><i class="fas fa-hospital me-2"></i>PharmaGeo</a></h5>
+                    <a href="<?php echo BASE_URL; ?>index.php" style="text-decoration: none; display: inline-block;"><img class="pg-footer-logo" src="<?php echo BASE_URL; ?>assets/identite/logos/svg/pharmageo-logo-horizontal-blanc.svg" alt="PharmaGeo"></a>
                     <p class="small opacity-75">
                         Plateforme intelligente de géolocalisation des pharmacies et de recherche de disponibilité des médicaments.
                     </p>

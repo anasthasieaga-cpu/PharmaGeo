@@ -525,6 +525,14 @@ $photo_admin_dispo = pharma_image_disponible($photo_admin);
         }
     </style>    <!-- Palette verte PharmaGeo -->
     <link rel="stylesheet" href="<?php echo BASE_URL; ?>assets/css/palette.css">
+    <!-- Favicon & identité visuelle PharmaGéo -->
+    <link rel="icon" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="<?php echo BASE_URL; ?>assets/identite/favicons/apple-touch-icon.png">
+    <link rel="manifest" href="<?php echo BASE_URL; ?>assets/identite/favicons/site.webmanifest">
+    <meta property="og:image" content="<?php echo BASE_URL; ?>assets/identite/reseaux-sociaux/og-image-1200x630.png">
 </head>
 <body>
 
@@ -533,7 +541,7 @@ $photo_admin_dispo = pharma_image_disponible($photo_admin);
     <!-- ===== SIDEBAR ===== -->
     <aside class="sidebar" id="sidebar">
         <a href="<?php echo BASE_URL; ?>index.php" class="brand" style="text-decoration: none;">
-            <div class="brand-icon"><i class="fas fa-hospital"></i></div>
+            <div class="brand-icon"><img class="pg-brand-logo" src="<?php echo BASE_URL; ?>assets/identite/icones/pharmageo-icone-blanc.svg" alt=""></div>
             <div><h4>PharmaGeo</h4><small>Administration</small></div>
         </a>
 

@@ -47,10 +47,16 @@ if (estConnecte()) {
     <meta property="og:title" content="<?php echo htmlspecialchars($page_title); ?>">
     <meta property="og:description" content="<?php echo htmlspecialchars($page_description); ?>">
     <meta property="og:url" content="<?php echo BASE_URL; ?>">
+    <meta property="og:image" content="<?php echo BASE_URL; ?>assets/identite/reseaux-sociaux/og-image-1200x630.png">
     
-    <!-- Favicon -->
-    <link rel="icon" href="<?php echo BASE_URL; ?>assets/images/favicon.ico" type="image/x-icon">
-    <link rel="shortcut icon" href="<?php echo BASE_URL; ?>assets/images/favicon.ico" type="image/x-icon">
+    <!-- Favicon & identité visuelle PharmaGéo -->
+    <link rel="icon" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="<?php echo BASE_URL; ?>assets/identite/favicons/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="<?php echo BASE_URL; ?>assets/identite/favicons/apple-touch-icon.png">
+    <link rel="manifest" href="<?php echo BASE_URL; ?>assets/identite/favicons/site.webmanifest">
+    <meta name="theme-color" content="#16A34A">
     
     <!-- Bootstrap 5 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -77,12 +83,11 @@ if (estConnecte()) {
 </head>
 <body>
     <!-- ===== NAVIGATION PRINCIPALE ===== -->
-    <nav class="navbar navbar-expand-lg navbar-dark sticky-top" style="background: linear-gradient(135deg, #16A34A, #166534); box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top" style="background: linear-gradient(135deg, var(--primary-green), var(--night-green)); box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
         <div class="container">
             <!-- Logo / Marque -->
-            <a class="navbar-brand fw-bold" href="<?php echo BASE_URL; ?>">
-                <i class="fas fa-hospital me-2"></i>
-                <span>PharmaGeo</span>
+            <a class="navbar-brand fw-bold d-flex align-items-center" href="<?php echo BASE_URL; ?>">
+                <img class="pg-brand-wordmark" src="<?php echo BASE_URL; ?>assets/identite/logos/svg/pharmageo-logo-horizontal-blanc.svg" alt="PharmaGeo">
             </a>
             
             <!-- Bouton Toggle pour mobile -->
