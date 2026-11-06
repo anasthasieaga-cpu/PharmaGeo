@@ -474,6 +474,36 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
             max-width: 400px;
         }
 
+        .search-box-map { position: relative; }
+        .search-suggest {
+            display: none;
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            right: 0;
+            background: var(--white);
+            border-radius: 16px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+            border: 1px solid #D9E9DF;
+            max-height: 320px;
+            overflow-y: auto;
+            z-index: 1500;
+        }
+        .search-suggest.open { display: block; }
+        .search-suggest .sg-item {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            padding: 10px 14px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .search-suggest .sg-item:hover,
+        .search-suggest .sg-item.active { background: #F0FDF4; }
+        .search-suggest .sg-item i { color: #16A34A; margin-top: 3px; }
+        .search-suggest .sg-item small { display: block; color: #6B7280; }
+        .search-suggest .sg-vide { padding: 12px 14px; color: #6B7280; font-size: 0.85rem; }
+
         .search-box-map:focus-within {
             border-color: var(--primary-green);
             box-shadow: 0 0 0 4px rgba(22,163,74,0.1);
@@ -859,11 +889,12 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
                     </div>
                 </div>
                 <div class="col-md-6">
-                    <form class="search-box-map" id="searchForm">
-                        <input type="text" class="form-control" id="searchInput" placeholder="Rechercher une pharmacie..." aria-label="Rechercher une pharmacie">
+                    <form class="search-box-map" id="searchForm" autocomplete="off">
+                        <input type="text" class="form-control" id="searchInput" placeholder="Rechercher une pharmacie, un quartier, une rue..." aria-label="Rechercher une pharmacie ou un lieu" role="combobox" aria-expanded="false" aria-controls="searchSuggest">
                         <button type="submit" class="btn-search">
                             <i class="fas fa-search"></i>
                         </button>
+                        <div class="search-suggest" id="searchSuggest" role="listbox"></div>
                     </form>
                 </div>
             </div>
@@ -1101,6 +1132,7 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
                         this.openPopup();
                     });
 
+                    marker._pharmacy = pharmacy;
                     markers.push(marker);
 
                     // Si c'est le premier, ouvrir le popup
@@ -1317,28 +1349,142 @@ $page_title = 'Carte des pharmacies - PharmaGeo';
                 });
             });
 
-            // ===== RECHERCHE =====
-            document.getElementById('searchForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
-                
-                if (searchTerm === '') {
-                    document.querySelectorAll('.pharmacy-list-item').forEach(item => {
-                        item.style.display = 'flex';
-                    });
-                    return;
-                }
+            // ===== RECHERCHE (suggestions comme sur Google Maps) =====
+            // Tape-et-trouve : les pharmacies correspondantes sont proposées
+            // pendant la saisie ; un choix centre la carte et ouvre sa fiche.
+            // Si aucune pharmacie ne correspond, la recherche porte sur un
+            // lieu (quartier, rue) via OpenStreetMap, limité au Bénin.
+            const searchInput = document.getElementById('searchInput');
+            const searchSuggest = document.getElementById('searchSuggest');
+            let suggestions = [];
+            let suggestIndex = -1;
+            let lieuMarker = null;
 
+            function normaliser(t) {
+                return (t || '').toString().toLowerCase()
+                    .normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+            }
+            function echapper(t) {
+                return (t || '').toString().replace(/[&<>"']/g, c => (
+                    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            }
+
+            function pharmaciesCorrespondantes(terme) {
+                const t = normaliser(terme);
+                if (t === '') return [];
+                return pharmaciesData.filter(p => {
+                    const texte = normaliser([p.Nom, p.Quartier, p.Commune, p.Adresse].join(' '));
+                    return t.split(/\s+/).every(mot => texte.includes(mot));
+                });
+            }
+
+            // La liste latérale suit la saisie
+            function filtrerListe(terme) {
+                const ids = new Set(pharmaciesCorrespondantes(terme).map(p => String(p.Id_pharmacie)));
+                const tout = normaliser(terme) === '';
                 document.querySelectorAll('.pharmacy-list-item').forEach(item => {
-                    const name = item.querySelector('.name')?.textContent?.toLowerCase() || '';
-                    const address = item.querySelector('.address')?.textContent?.toLowerCase() || '';
-                    
-                    if (name.includes(searchTerm) || address.includes(searchTerm)) {
-                        item.style.display = 'flex';
+                    item.style.display = (tout || ids.has(String(item.dataset.id))) ? 'flex' : 'none';
+                });
+            }
+
+            function fermerSuggestions() {
+                searchSuggest.classList.remove('open');
+                searchSuggest.innerHTML = '';
+                searchInput.setAttribute('aria-expanded', 'false');
+                suggestIndex = -1;
+            }
+
+            function ouvrirPharmacie(pharmacy) {
+                const lat = parseFloat(pharmacy.Latitude);
+                const lng = parseFloat(pharmacy.Longitude);
+                if (isNaN(lat) || isNaN(lng)) return;
+                searchInput.value = pharmacy.Nom;
+                filtrerListe(pharmacy.Nom);
+                fermerSuggestions();
+                map.setView([lat, lng], 17);
+                const marker = markers.find(m => m._pharmacy && m._pharmacy.Id_pharmacie === pharmacy.Id_pharmacie);
+                if (marker) marker.openPopup();
+            }
+
+            function allerAuLieu(lieu) {
+                fermerSuggestions();
+                if (lieuMarker) map.removeLayer(lieuMarker);
+                map.setView(lieu.center, 16);
+                lieuMarker = L.marker(lieu.center).addTo(map)
+                    .bindPopup(echapper(lieu.name)).openPopup();
+            }
+
+            function afficherSuggestions(terme) {
+                const trouvees = pharmaciesCorrespondantes(terme).slice(0, 6);
+                suggestions = trouvees.map(p => ({ type: 'pharmacie', pharmacy: p }));
+                if (normaliser(terme).length >= 2) suggestions.push({ type: 'lieu', terme: terme.trim() });
+                suggestIndex = -1;
+
+                if (suggestions.length === 0) { fermerSuggestions(); return; }
+
+                searchSuggest.innerHTML = suggestions.map((sg, i) => {
+                    if (sg.type === 'pharmacie') {
+                        const p = sg.pharmacy;
+                        return '<div class="sg-item" role="option" data-i="' + i + '"><i class="fas fa-store"></i>' +
+                            '<span>' + echapper(p.Nom) + '<small>' + echapper([p.Quartier, p.Commune].filter(Boolean).join(', ')) + '</small></span></div>';
+                    }
+                    return '<div class="sg-item" role="option" data-i="' + i + '"><i class="fas fa-location-dot"></i>' +
+                        '<span>Chercher le lieu « ' + echapper(sg.terme) + ' »<small>Quartier, rue, repère (Porto-Novo et environs)</small></span></div>';
+                }).join('');
+                searchSuggest.classList.add('open');
+                searchInput.setAttribute('aria-expanded', 'true');
+            }
+
+            function choisir(sg) {
+                if (!sg) return;
+                if (sg.type === 'pharmacie') { ouvrirPharmacie(sg.pharmacy); return; }
+
+                searchSuggest.innerHTML = '<div class="sg-vide">Recherche du lieu...</div>';
+                L.Control.Geocoder.nominatim({
+                    geocodingQueryParams: { countrycodes: 'bj', limit: 1, viewbox: '2.46,6.67,2.79,6.33', bounded: 1 }
+                }).geocode(sg.terme, function (resultats) {
+                    if (resultats && resultats.length > 0) {
+                        allerAuLieu(resultats[0]);
                     } else {
-                        item.style.display = 'none';
+                        searchSuggest.innerHTML = '<div class="sg-vide">Aucun lieu trouvé pour « ' + echapper(sg.terme) + ' ».</div>';
                     }
                 });
+            }
+
+            searchInput.addEventListener('input', function() {
+                filtrerListe(this.value);
+                afficherSuggestions(this.value);
+            });
+
+            searchInput.addEventListener('keydown', function(e) {
+                const items = searchSuggest.querySelectorAll('.sg-item');
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    if (items.length === 0) return;
+                    e.preventDefault();
+                    suggestIndex = (suggestIndex + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+                    items.forEach((el, i) => el.classList.toggle('active', i === suggestIndex));
+                } else if (e.key === 'Escape') {
+                    fermerSuggestions();
+                }
+            });
+
+            searchSuggest.addEventListener('mousedown', function(e) {
+                const item = e.target.closest('.sg-item');
+                if (!item) return;
+                e.preventDefault();
+                choisir(suggestions[parseInt(item.dataset.i)]);
+            });
+
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('#searchForm')) fermerSuggestions();
+            });
+
+            // Entrée : choix en surbrillance, sinon première pharmacie, sinon le lieu
+            document.getElementById('searchForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                if (normaliser(searchInput.value) === '') { filtrerListe(''); fermerSuggestions(); return; }
+                afficherSuggestions(searchInput.value);
+                choisir(suggestions[suggestIndex >= 0 ? suggestIndex : 0]);
             });
 
             // ===== CONTROLES DE LA CARTE =====

@@ -1191,7 +1191,7 @@ $page_title = 'Ma pharmacie - PharmaGeo';
     <script src="../assets/js/coord_picker.js"></script>
     <script>
         if (window.PharmaCoordPicker) {
-            PharmaCoordPicker.init({ map: 'coordMap', lat: 'latitude', lng: 'longitude', bouton: 'btnLocate', statut: 'locateStatus' });
+            PharmaCoordPicker.init({ map: 'coordMap', lat: 'latitude', lng: 'longitude', bouton: 'btnLocate', statut: 'locateStatus', reference: '../assets/data/pharmacies_osm_porto_novo.json' });
         }
     </script>
     
